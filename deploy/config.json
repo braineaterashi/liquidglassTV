@@ -1,0 +1,41 @@
+{
+    "greeting_name": "Ashish ❤️",
+    "live_tv_package": "com.tcl.tv",
+    "focus_overshoot": true,
+    "app_glow": true,
+    "dock_apps": [
+        "com.netflix.ninja",
+        "com.google.android.youtube.tv",
+        "com.amazon.amazonvideo.livingroom",
+        "in.startv.hotstar",
+        "com.sonyliv",
+        "com.stremio.one"
+    ],
+    "show_network_pill": false,
+    "ambient_glow": false,
+    "always_show_names": true,
+    "columns": 6,
+    "advanced_effects": true,
+    "dock_title": false,
+    "app_labels": [
+        "com.netflix.ninja=Netflix",
+        "com.google.android.youtube.tv=YouTube",
+        "com.amazon.amazonvideo.livingroom=Prime Video",
+        "in.startv.hotstar=Disney+",
+        "com.sonyliv=SonyLIV",
+        "com.stremio.one=Stremio",
+        "com.tcl.tv=PlayStation 5"
+    ],
+    "show_inputs_pill": false,
+    "dock_glass": true,
+    "rows_below_dock": 0,
+    "wallpaper_dim": 20,
+    "dock_opacity": 40,
+    "wallpaper_true_color": true,
+    "wallpaper": true,
+    "wallpaper_rotation_minutes": 60,
+    "wallpaper_order": "shuffle",
+    "fill_dock": false,
+    "icon_only_buttons": true,
+    "background_color": "#030406"
+}

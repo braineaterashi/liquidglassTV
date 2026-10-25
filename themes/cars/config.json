@@ -1,0 +1,20 @@
+﻿{
+    "wallpaper_captions":  true,
+    "show_inputs_pill":  true,
+    "fill_dock":  true,
+    "show_stats":  true,
+    "wallpaper_order":  "shuffle",
+    "wallpaper_dim":  30,
+    "show_network_pill":  true,
+    "cinematic_home":  true,
+    "wallpaper":  true,
+    "live_tv_package":  "com.tcl.tv",
+    "wallpaper_rotation_minutes":  10,
+    "dock_apps":  [
+                      "com.google.android.youtube.tv",
+                      "com.netflix.ninja",
+                      "com.amazon.amazonvideo.livingroom",
+                      "in.startv.hotstar"
+                  ],
+    "ambient_glow":  true
+}
