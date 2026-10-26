@@ -155,6 +155,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private int glassAccent;
     private int ambientColor = -1;
     private ValueAnimator ambientAnimator;
+    private View miniPlayer;
+    private boolean isHomescreenVisible;
     private NowPlayingManager.OnTrackChangeListener mediaTrackListener;
     private final Handler hudDismissHandler = new Handler(Looper.getMainLooper());
     private Runnable hudDismissRunnable;
@@ -446,7 +448,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         View topButtons = findViewById(R.id.topButtons);
 
         // Liquid Glass Mini Media Player (Top Right Corner)
-        View miniPlayer = getLayoutInflater().inflate(R.layout.view_mini_player, root, false);
+        miniPlayer = getLayoutInflater().inflate(R.layout.view_mini_player, root, false);
         FrameLayout.LayoutParams miniPlayerLp = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -528,6 +530,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 hudDismissHandler.postDelayed(hudDismissRunnable, 2500L);
                 return;
             }
+            MediaTrack cur = NowPlayingManager.getInstance().getActiveTrack();
+            if (cur != null && cur.isPlaying) {
+                // Keep visible indefinitely while music is playing!
+                return;
+            }
             miniPlayer.animate().cancel();
             miniPlayer.animate()
                     .translationY(-28 * density)
@@ -558,34 +565,25 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 miniPlayer.setScaleX(1f);
                 miniPlayer.setScaleY(1f);
             } else {
-                hudDismissHandler.removeCallbacks(hudDismissRunnable);
-                hudDismissHandler.postDelayed(hudDismissRunnable, 3500L);
+                MediaTrack cur = NowPlayingManager.getInstance().getActiveTrack();
+                if (cur == null || !cur.isPlaying) {
+                    hudDismissHandler.removeCallbacks(hudDismissRunnable);
+                    hudDismissHandler.postDelayed(hudDismissRunnable, 3500L);
+                }
             }
         };
 
         if (btnPlayerPrev != null) {
             btnPlayerPrev.setOnFocusChangeListener(playerFocusListener);
-            btnPlayerPrev.setOnClickListener(v -> {
-                NowPlayingManager.getInstance().previous();
-                hudDismissHandler.removeCallbacks(hudDismissRunnable);
-                hudDismissHandler.postDelayed(hudDismissRunnable, 4500L);
-            });
+            btnPlayerPrev.setOnClickListener(v -> NowPlayingManager.getInstance().previous());
         }
         if (btnPlayerPlayPause != null) {
             btnPlayerPlayPause.setOnFocusChangeListener(playerFocusListener);
-            btnPlayerPlayPause.setOnClickListener(v -> {
-                NowPlayingManager.getInstance().togglePlayPause();
-                hudDismissHandler.removeCallbacks(hudDismissRunnable);
-                hudDismissHandler.postDelayed(hudDismissRunnable, 4500L);
-            });
+            btnPlayerPlayPause.setOnClickListener(v -> NowPlayingManager.getInstance().togglePlayPause());
         }
         if (btnPlayerNext != null) {
             btnPlayerNext.setOnFocusChangeListener(playerFocusListener);
-            btnPlayerNext.setOnClickListener(v -> {
-                NowPlayingManager.getInstance().next();
-                hudDismissHandler.removeCallbacks(hudDismissRunnable);
-                hudDismissHandler.postDelayed(hudDismissRunnable, 4500L);
-            });
+            btnPlayerNext.setOnClickListener(v -> NowPlayingManager.getInstance().next());
         }
         View.OnClickListener openAppAction = v -> NowPlayingManager.getInstance().openApp(MainActivity.this);
         miniPlayer.setOnClickListener(openAppAction);
@@ -596,6 +594,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         mediaTrackListener = new NowPlayingManager.OnTrackChangeListener() {
             @Override
             public void onTrackUpdated(@androidx.annotation.Nullable MediaTrack track) {
+                if (!isHomescreenVisible) {
+                    return;
+                }
                 if (track == null) {
                     hudDismissHandler.removeCallbacks(hudDismissRunnable);
                     lastTrackKey = "";
@@ -662,12 +663,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     equalizerBars.setPlaying(track.isPlaying);
                 }
 
-                String currentKey = track.title + "|" + track.artist + "|" + track.isPlaying;
-                boolean isNewSong = !currentKey.equals(lastTrackKey);
-                lastTrackKey = currentKey;
+                lastTrackKey = track.title + "|" + track.artist + "|" + track.isPlaying;
 
-                // Only show if playing, or if it's a new song update
-                if (track.isPlaying || isNewSong) {
+                if (track.isPlaying) {
+                    hudDismissHandler.removeCallbacks(hudDismissRunnable);
                     if (topButtons != null && topButtons.getVisibility() == View.VISIBLE) {
                         topButtons.animate().cancel();
                         topButtons.animate().alpha(0f).setDuration(200)
@@ -695,10 +694,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                             .setDuration(450)
                             .setInterpolator(new DecelerateInterpolator(1.6f))
                             .start();
-
-                    // Automatically float away and fade out after 6.5 seconds!
+                } else {
+                    // Song paused: keep visible for 4.5s so user sees pause state, then gracefully float away
                     hudDismissHandler.removeCallbacks(hudDismissRunnable);
-                    hudDismissHandler.postDelayed(hudDismissRunnable, 6500L);
+                    hudDismissHandler.postDelayed(hudDismissRunnable, 4500L);
                 }
             }
         };
@@ -1027,8 +1026,22 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onResume() {
         super.onResume();
+        isHomescreenVisible = true;
         CallBannerManager.getInstance(this).setHomescreenVisible(true);
         AncsBleManager.getInstance(this).connectBondedDevices();
+
+        // Re-display mini player on homescreen if a song is playing
+        MediaTrack activeTrack = NowPlayingManager.getInstance().getActiveTrack();
+        if (activeTrack != null && activeTrack.isPlaying && mediaTrackListener != null) {
+            mediaTrackListener.onTrackUpdated(activeTrack);
+        }
+
+        // Keep YouTube audio playing in background when minimized to homescreen
+        handler.postDelayed(() -> {
+            if (isHomescreenVisible) {
+                NowPlayingManager.getInstance().resumeTvPlaybackIfYouTube(MainActivity.this);
+            }
+        }, 400L);
         // A festival that started or ended while Home was in the background: rebuild with or without it.
         if (festive != festival.active(LocalDate.now())) {
             recreate();
@@ -1209,6 +1222,17 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onPause() {
         super.onPause();
+        isHomescreenVisible = false;
+        hudDismissHandler.removeCallbacks(hudDismissRunnable);
+        if (miniPlayer != null) {
+            miniPlayer.animate().cancel();
+            miniPlayer.setVisibility(View.GONE);
+        }
+        View topButtons = findViewById(R.id.topButtons);
+        if (topButtons != null) {
+            topButtons.setVisibility(View.VISIBLE);
+            topButtons.setAlpha(1f);
+        }
         CallBannerManager.getInstance(this).setHomescreenVisible(false);
         root.removeCallbacks(showIdleClock);
         endReorder();   // Home or another app while reordering keeps the order so far
@@ -1225,6 +1249,28 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (cardPrompt != null) cardPrompt.dismiss();
         if (appLibrary != null) appLibrary.close();
         if (openPopup != null) openPopup.dismiss();
+    }
+
+    @Override
+    public void startActivity(Intent intent, Bundle options) {
+        if (intent != null) {
+            ComponentName cn = intent.getComponent();
+            if (cn != null && !cn.getPackageName().equals(getPackageName())) {
+                NowPlayingManager.getInstance().pauseTvPlayback();
+            }
+        }
+        super.startActivity(intent, options);
+    }
+
+    @Override
+    public void startActivityForResult(Intent intent, int requestCode, Bundle options) {
+        if (intent != null) {
+            ComponentName cn = intent.getComponent();
+            if (cn != null && !cn.getPackageName().equals(getPackageName())) {
+                NowPlayingManager.getInstance().pauseTvPlayback();
+            }
+        }
+        super.startActivityForResult(intent, requestCode, options);
     }
 
     @Override

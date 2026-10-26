@@ -3,11 +3,14 @@ package com.gathin.tvhome;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.media.AudioManager;
 import android.media.session.MediaController;
 import android.media.session.PlaybackState;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
+import android.view.KeyEvent;
 
 import androidx.annotation.Nullable;
 
@@ -26,6 +29,11 @@ public final class NowPlayingManager {
 
     private MediaTrack tvTrack;
     private MediaTrack remoteTrack;
+
+    private MediaController lastTvController;
+    private String lastTvPackage;
+    private boolean wasTvPlaying;
+    private boolean userExplicitlyPaused;
 
     public interface OnTrackChangeListener {
         void onTrackUpdated(@Nullable MediaTrack track);
@@ -57,6 +65,16 @@ public final class NowPlayingManager {
 
     public synchronized void updateTvTrack(@Nullable MediaTrack track) {
         this.tvTrack = track;
+        if (track != null && track.isTvSource) {
+            if (track.mediaController != null) {
+                this.lastTvController = track.mediaController;
+                this.lastTvPackage = track.mediaController.getPackageName();
+            }
+            if (track.isPlaying) {
+                this.wasTvPlaying = true;
+                this.userExplicitlyPaused = false;
+            }
+        }
         dispatchUpdate();
     }
 
@@ -68,6 +86,76 @@ public final class NowPlayingManager {
     public synchronized void clearRemoteTrack() {
         this.remoteTrack = null;
         dispatchUpdate();
+    }
+
+    public synchronized @Nullable MediaTrack getRemoteTrack() {
+        return remoteTrack;
+    }
+
+    public synchronized @Nullable MediaTrack getTvTrack() {
+        return tvTrack;
+    }
+
+    public synchronized void setLastTvSession(MediaController controller, String packageName, boolean isPlaying) {
+        if (controller != null) {
+            this.lastTvController = controller;
+        }
+        if (packageName != null) {
+            this.lastTvPackage = packageName;
+        }
+        if (isPlaying) {
+            this.wasTvPlaying = true;
+            this.userExplicitlyPaused = false;
+        }
+    }
+
+    public synchronized boolean isYouTubePlaybackActiveOrPaused() {
+        if (userExplicitlyPaused) return false;
+        if (lastTvPackage != null && lastTvPackage.contains("youtube")) {
+            return wasTvPlaying;
+        }
+        if (tvTrack != null && tvTrack.sourceName != null && tvTrack.sourceName.toLowerCase().contains("youtube")) {
+            return wasTvPlaying || tvTrack.isPlaying;
+        }
+        return false;
+    }
+
+    public synchronized void resumeTvPlaybackIfYouTube(Context context) {
+        if (userExplicitlyPaused) return;
+        if (!isYouTubePlaybackActiveOrPaused()) return;
+
+        Log.i(TAG, "Resuming YouTube background playback on homescreen");
+        if (lastTvController != null) {
+            try {
+                lastTvController.getTransportControls().play();
+            } catch (Exception e) {
+                Log.w(TAG, "Controller play failed", e);
+            }
+        }
+
+        if (context != null) {
+            try {
+                AudioManager am = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+                if (am != null) {
+                    long now = SystemClock.uptimeMillis();
+                    am.dispatchMediaKeyEvent(new KeyEvent(now, now, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY, 0));
+                    am.dispatchMediaKeyEvent(new KeyEvent(now, now, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY, 0));
+                }
+            } catch (Exception ignored) {}
+        }
+    }
+
+    public synchronized void pauseTvPlayback() {
+        if (lastTvController != null) {
+            try {
+                lastTvController.getTransportControls().pause();
+            } catch (Exception ignored) {}
+        }
+        if (tvTrack != null && tvTrack.mediaController != null && tvTrack.mediaController != lastTvController) {
+            try {
+                tvTrack.mediaController.getTransportControls().pause();
+            } catch (Exception ignored) {}
+        }
     }
 
     /**
@@ -111,8 +199,12 @@ public final class NowPlayingManager {
         if (active.isTvSource && active.mediaController != null) {
             MediaController.TransportControls controls = active.mediaController.getTransportControls();
             if (active.isPlaying) {
+                userExplicitlyPaused = true;
+                wasTvPlaying = false;
                 controls.pause();
             } else {
+                userExplicitlyPaused = false;
+                wasTvPlaying = true;
                 controls.play();
             }
         } else {

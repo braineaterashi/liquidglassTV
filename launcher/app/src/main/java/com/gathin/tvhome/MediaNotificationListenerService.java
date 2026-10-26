@@ -162,6 +162,8 @@ public class MediaNotificationListenerService extends NotificationListenerServic
         String pkg = currentController.getPackageName();
         String appName = getAppLabel(pkg);
 
+        NowPlayingManager.getInstance().setLastTvSession(currentController, pkg, isPlaying);
+
         if (title == null || title.isEmpty()) {
             // If title is missing and not playing, omit
             if (!isPlaying) {
@@ -169,6 +171,36 @@ public class MediaNotificationListenerService extends NotificationListenerServic
                 return;
             }
             title = "Playing Media";
+        }
+
+        final String finalTitle = title;
+        final String finalArtist = artist != null ? artist : appName;
+        final MediaController finalController = currentController;
+
+        if (art == null && metadata != null) {
+            String artUri = metadata.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI);
+            if (artUri == null) artUri = metadata.getString(MediaMetadata.METADATA_KEY_ART_URI);
+            if (artUri == null) artUri = metadata.getString(MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI);
+
+            ArtworkHelper.loadArtwork(finalTitle, finalArtist, artUri, bmp -> {
+                if (bmp != null) {
+                    handler.post(() -> {
+                        MediaTrack currentTv = NowPlayingManager.getInstance().getTvTrack();
+                        if (currentTv != null && finalTitle.equalsIgnoreCase(currentTv.title)) {
+                            MediaTrack withArt = new MediaTrack(
+                                    currentTv.title,
+                                    currentTv.artist,
+                                    currentTv.sourceName,
+                                    currentTv.isPlaying,
+                                    true,
+                                    bmp,
+                                    finalController
+                            );
+                            NowPlayingManager.getInstance().updateTvTrack(withArt);
+                        }
+                    });
+                }
+            });
         }
 
         MediaTrack track = new MediaTrack(
