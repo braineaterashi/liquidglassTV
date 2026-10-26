@@ -175,7 +175,7 @@ public final class CallWebhookServer {
                     String source = null;
                     if (bodyJson != null) source = bodyJson.optString("source", null);
                     if (source == null) source = uri.getQueryParameter("source");
-                    if (source == null || source.isEmpty()) source = "Apple Music";
+                    if (source == null || source.isEmpty()) source = "YouTube Music";
 
                     // Extract Playing
                     boolean isPlaying = true;

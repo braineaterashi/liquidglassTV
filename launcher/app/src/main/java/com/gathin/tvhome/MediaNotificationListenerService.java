@@ -219,8 +219,7 @@ public class MediaNotificationListenerService extends NotificationListenerServic
     private String getAppLabel(String packageName) {
         if (packageName == null) return "TV";
         String lower = packageName.toLowerCase();
-        if (lower.contains("apple") || lower.equals("com.apple.android.music")) return "Apple Music";
-        if (lower.contains("youtube.tvmusic")) return "YouTube Music";
+        if (lower.contains("youtube.tvmusic") || lower.contains(".music")) return "YouTube Music";
         if (lower.contains("youtube")) return "YouTube";
         if (lower.contains("spotify")) return "Spotify";
         if (lower.contains("netflix")) return "Netflix";

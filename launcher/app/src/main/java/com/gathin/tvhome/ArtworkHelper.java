@@ -132,7 +132,7 @@ public final class ArtworkHelper {
         try {
             URL url = new URL(urlStr);
             conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestProperty("User-Agent", "CleanYourTV/1.0 (Apple Music/WebHook)");
+            conn.setRequestProperty("User-Agent", "CleanYourTV/1.0 (YouTube Music TV)");
             conn.setConnectTimeout(4000);
             conn.setReadTimeout(4000);
             if (conn.getResponseCode() == 200) {
@@ -155,7 +155,7 @@ public final class ArtworkHelper {
         try {
             URL url = new URL(urlStr);
             conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestProperty("User-Agent", "CleanYourTV/1.0 (Apple Music/WebHook)");
+            conn.setRequestProperty("User-Agent", "CleanYourTV/1.0 (YouTube Music TV)");
             conn.setConnectTimeout(4500);
             conn.setReadTimeout(4500);
             if (conn.getResponseCode() == 200) {

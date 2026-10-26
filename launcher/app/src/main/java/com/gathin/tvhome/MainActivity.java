@@ -459,6 +459,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         miniPlayer.setVisibility(View.GONE);
         miniPlayer.setElevation(35 * density);
         root.addView(miniPlayer, miniPlayerLp);
+        BackgroundYouTubeAudioPlayer.getInstance().init(this);
 
         CallBannerManager.getInstance(this).setInAppListener(new CallBannerManager.OnCallBannerListener() {
             private ObjectAnimator inAppPulse;
@@ -643,14 +644,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     if (playerIconBadge != null) {
                         playerIconBadge.setVisibility(View.VISIBLE);
                         String src = track.sourceName != null ? track.sourceName.toLowerCase() : "";
-                        if (src.contains("apple")) {
-                            playerIconBadge.setText("🍎");
+                        if (src.contains("music")) {
+                            playerIconBadge.setText("🎵");
                         } else if (src.contains("youtube")) {
                             playerIconBadge.setText("▶");
                         } else if (src.contains("spotify")) {
                             playerIconBadge.setText("🎧");
                         } else {
-                            playerIconBadge.setText("🎵");
+                            playerIconBadge.setText("▶");
                         }
                     }
                 }
@@ -1256,6 +1257,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (intent != null) {
             ComponentName cn = intent.getComponent();
             if (cn != null && !cn.getPackageName().equals(getPackageName())) {
+                BackgroundYouTubeAudioPlayer.getInstance().stop();
                 NowPlayingManager.getInstance().pauseTvPlayback();
             }
         }
@@ -1267,6 +1269,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (intent != null) {
             ComponentName cn = intent.getComponent();
             if (cn != null && !cn.getPackageName().equals(getPackageName())) {
+                BackgroundYouTubeAudioPlayer.getInstance().stop();
                 NowPlayingManager.getInstance().pauseTvPlayback();
             }
         }

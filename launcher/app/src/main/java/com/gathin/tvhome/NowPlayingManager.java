@@ -5,7 +5,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.media.AudioManager;
 import android.media.session.MediaController;
-import android.media.session.PlaybackState;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -17,8 +16,8 @@ import androidx.annotation.Nullable;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * Manages active media playback state from both the TV (YouTube, Spotify, etc.) and remote devices (iPhone).
- * Strictly prioritizes TV playback when both TV and remote devices are active.
+ * Manages active media playback state for YouTube, YouTube Music, and connected sources.
+ * Retains YouTube playback on homescreen so background audio and mini player stay active.
  */
 public final class NowPlayingManager {
     private static final String TAG = "NowPlayingManager";
@@ -64,6 +63,14 @@ public final class NowPlayingManager {
     }
 
     public synchronized void updateTvTrack(@Nullable MediaTrack track) {
+        if (track == null) {
+            if (tvTrack != null && isYouTubeTrack(tvTrack) && wasTvPlaying && !userExplicitlyPaused) {
+                // Retain YouTube / YouTube Music track active for background homescreen playback
+                Log.d(TAG, "Retaining YouTube track for background homescreen display: " + tvTrack.title);
+                return;
+            }
+        }
+
         this.tvTrack = track;
         if (track != null && track.isTvSource) {
             if (track.mediaController != null) {
@@ -88,12 +95,29 @@ public final class NowPlayingManager {
         dispatchUpdate();
     }
 
+    public synchronized void clearAllTracks() {
+        this.tvTrack = null;
+        this.remoteTrack = null;
+        this.wasTvPlaying = false;
+        this.userExplicitlyPaused = true;
+        BackgroundYouTubeAudioPlayer.getInstance().stop();
+        dispatchUpdate();
+    }
+
     public synchronized @Nullable MediaTrack getRemoteTrack() {
         return remoteTrack;
     }
 
     public synchronized @Nullable MediaTrack getTvTrack() {
         return tvTrack;
+    }
+
+    private boolean isYouTubeTrack(MediaTrack track) {
+        if (track == null) return false;
+        String src = track.sourceName != null ? track.sourceName.toLowerCase() : "";
+        if (src.contains("youtube") || src.contains("music")) return true;
+        if (lastTvPackage != null && lastTvPackage.contains("youtube")) return true;
+        return false;
     }
 
     public synchronized void setLastTvSession(MediaController controller, String packageName, boolean isPlaying) {
@@ -111,11 +135,11 @@ public final class NowPlayingManager {
 
     public synchronized boolean isYouTubePlaybackActiveOrPaused() {
         if (userExplicitlyPaused) return false;
+        if (tvTrack != null && isYouTubeTrack(tvTrack)) {
+            return wasTvPlaying || tvTrack.isPlaying;
+        }
         if (lastTvPackage != null && lastTvPackage.contains("youtube")) {
             return wasTvPlaying;
-        }
-        if (tvTrack != null && tvTrack.sourceName != null && tvTrack.sourceName.toLowerCase().contains("youtube")) {
-            return wasTvPlaying || tvTrack.isPlaying;
         }
         return false;
     }
@@ -142,10 +166,15 @@ public final class NowPlayingManager {
                     am.dispatchMediaKeyEvent(new KeyEvent(now, now, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY, 0));
                 }
             } catch (Exception ignored) {}
+
+            if (tvTrack != null) {
+                BackgroundYouTubeAudioPlayer.getInstance().play(context, tvTrack.title, tvTrack.artist);
+            }
         }
     }
 
     public synchronized void pauseTvPlayback() {
+        BackgroundYouTubeAudioPlayer.getInstance().stop();
         if (lastTvController != null) {
             try {
                 lastTvController.getTransportControls().pause();
@@ -156,12 +185,21 @@ public final class NowPlayingManager {
                 tvTrack.mediaController.getTransportControls().pause();
             } catch (Exception ignored) {}
         }
+        userExplicitlyPaused = true;
+        wasTvPlaying = false;
+        if (tvTrack != null) {
+            tvTrack = new MediaTrack(
+                    tvTrack.title, tvTrack.artist, tvTrack.sourceName, false,
+                    true, tvTrack.albumArt, tvTrack.mediaController
+            );
+            dispatchUpdate();
+        }
     }
 
     /**
      * Priority Rule:
-     * 1. If TV is currently playing, TV takes top priority.
-     * 2. If TV is idle/paused and remote device is playing, show remote device.
+     * 1. If TV is currently playing (YouTube / YouTube Music), TV takes top priority.
+     * 2. If TV is idle/paused and remote is playing, show remote device.
      * 3. If TV is paused, show TV.
      * 4. Else show remote.
      */
@@ -196,17 +234,26 @@ public final class NowPlayingManager {
         MediaTrack active = getActiveTrack();
         if (active == null) return;
 
-        if (active.isTvSource && active.mediaController != null) {
-            MediaController.TransportControls controls = active.mediaController.getTransportControls();
-            if (active.isPlaying) {
-                userExplicitlyPaused = true;
-                wasTvPlaying = false;
-                controls.pause();
-            } else {
-                userExplicitlyPaused = false;
-                wasTvPlaying = true;
-                controls.play();
+        if (active.isTvSource) {
+            boolean willPlay = !active.isPlaying;
+            if (active.mediaController != null) {
+                try {
+                    if (willPlay) active.mediaController.getTransportControls().play();
+                    else active.mediaController.getTransportControls().pause();
+                } catch (Exception ignored) {}
             }
+            if (BackgroundYouTubeAudioPlayer.getInstance().isPlaying() && !willPlay) {
+                BackgroundYouTubeAudioPlayer.getInstance().pause();
+            } else if (willPlay) {
+                BackgroundYouTubeAudioPlayer.getInstance().resume();
+            }
+            userExplicitlyPaused = !willPlay;
+            wasTvPlaying = willPlay;
+            this.tvTrack = new MediaTrack(
+                    active.title, active.artist, active.sourceName, willPlay,
+                    true, active.albumArt, active.mediaController
+            );
+            dispatchUpdate();
         } else {
             // Remote track: toggle local state
             boolean newState = !active.isPlaying;
@@ -232,6 +279,7 @@ public final class NowPlayingManager {
     }
 
     public void openApp(Context context) {
+        BackgroundYouTubeAudioPlayer.getInstance().stop();
         MediaTrack active = getActiveTrack();
         if (active == null) return;
         if (active.isTvSource && active.mediaController != null) {
@@ -244,20 +292,21 @@ public final class NowPlayingManager {
                     Log.w(TAG, "Failed to launch session activity", e);
                 }
             }
-            String pkg = active.mediaController.getPackageName();
-            if (pkg != null && context != null) {
-                try {
-                    Intent intent = context.getPackageManager().getLeanbackLaunchIntentForPackage(pkg);
-                    if (intent == null) {
-                        intent = context.getPackageManager().getLaunchIntentForPackage(pkg);
-                    }
-                    if (intent != null) {
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                        context.startActivity(intent);
-                    }
-                } catch (Exception e) {
-                    Log.w(TAG, "Failed to launch package " + pkg, e);
+        }
+
+        // Open YouTube app on TV
+        if (context != null) {
+            try {
+                Intent intent = context.getPackageManager().getLeanbackLaunchIntentForPackage("com.google.android.youtube.tv");
+                if (intent == null) {
+                    intent = context.getPackageManager().getLaunchIntentForPackage("com.google.android.youtube.tv");
                 }
+                if (intent != null) {
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    context.startActivity(intent);
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "Failed to launch YouTube", e);
             }
         }
     }
