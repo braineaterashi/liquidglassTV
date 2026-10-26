@@ -1,8 +1,11 @@
 package com.gathin.tvhome;
 
 import android.animation.ArgbEvaluator;
+import android.animation.Keyframe;
 import android.animation.ObjectAnimator;
+import android.animation.PropertyValuesHolder;
 import android.animation.ValueAnimator;
+import android.view.animation.AccelerateDecelerateInterpolator;
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.ActivityNotFoundException;
@@ -157,6 +160,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean animations;
     private boolean advancedEffects;
     private TextView greeting;
+    private TextView greetingHeart;
+    private ObjectAnimator heartbeatAnimator;
     private TextView weatherView;
     private TextView weatherIconView;
     private View clockBlock;
@@ -397,6 +402,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // still follows the dock.
         if (!cfg.dockTitle) hero.setVisibility(View.GONE);
         greeting = findViewById(R.id.greeting);
+        greetingHeart = findViewById(R.id.greetingHeart);
+        if (greetingHeart != null) {
+            greetingHeart.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+                v.setPivotX((r - l) / 2.0f);
+                v.setPivotY((b - t) / 2.0f);
+            });
+            greetingHeart.setShadowLayer(6.0f, 0, 0, 0x80FF2D55);
+        }
         clockBlock = findViewById(R.id.leftBlock);
         greetingColor = greeting.getCurrentTextColor();
         btnWifi = findViewById(R.id.btnWifi);
@@ -991,6 +1004,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         heroArt.animate().cancel();
         handler.removeCallbacks(minuteTick);
         stopStats();
+        stopHeartbeat();
         if (diya != null) diya.stop();
         cancelPendingFocusScroll();
         // Nothing of ours stays on screen over another app; an undecided prompt simply returns next time.
@@ -2171,16 +2185,71 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (!festiveGreeting.isEmpty()) {
             greeting.setText(festiveGreeting);
             greeting.setTextColor(liftTowardsWhite(festival.accentColor(), 0.25f));
+            if (greetingHeart != null) {
+                greetingHeart.setVisibility(View.GONE);
+                stopHeartbeat();
+            }
         } else {
             String name = greetingName;
-            if (!name.isEmpty() && !name.contains("❤️") && !name.contains("❤")) {
-                name = name + " ❤️";
+            boolean hasHeart = name.contains("❤️") || name.contains("❤") || name.contains("♥");
+            String cleanName = name.replace("❤️", "").replace("❤", "").replace("♥", "").trim();
+            if (cleanName.endsWith(",")) {
+                cleanName = cleanName.substring(0, cleanName.length() - 1).trim();
             }
-            greeting.setText(name.isEmpty() ? getString(res)
-                    : getString(R.string.greeting_with_name, getString(res), name));
+            greeting.setText(cleanName.isEmpty() ? getString(res)
+                    : getString(R.string.greeting_with_name, getString(res), cleanName));
             greeting.setTextColor(greetingColor);
+
+            if (greetingHeart != null) {
+                if (!cleanName.isEmpty() || hasHeart) {
+                    greetingHeart.setVisibility(View.VISIBLE);
+                    startHeartbeat();
+                } else {
+                    greetingHeart.setVisibility(View.GONE);
+                    stopHeartbeat();
+                }
+            }
         }
         if (shamsi) shamsiDate.setText(Shamsi.today(getResources()));
+    }
+
+    private void startHeartbeat() {
+        if (greetingHeart == null || greetingHeart.getVisibility() != View.VISIBLE) return;
+        if (heartbeatAnimator != null && heartbeatAnimator.isRunning()) return;
+
+        greetingHeart.post(() -> {
+            if (greetingHeart == null) return;
+            greetingHeart.setPivotX(greetingHeart.getWidth() / 2.0f);
+            greetingHeart.setPivotY(greetingHeart.getHeight() / 2.0f);
+        });
+
+        Keyframe k0 = Keyframe.ofFloat(0.00f, 1.00f);
+        Keyframe k1 = Keyframe.ofFloat(0.12f, 1.32f);
+        Keyframe k2 = Keyframe.ofFloat(0.24f, 0.98f);
+        Keyframe k3 = Keyframe.ofFloat(0.36f, 1.18f);
+        Keyframe k4 = Keyframe.ofFloat(0.48f, 1.00f);
+        Keyframe k5 = Keyframe.ofFloat(1.00f, 1.00f);
+
+        PropertyValuesHolder pvhScaleX = PropertyValuesHolder.ofKeyframe(View.SCALE_X, k0, k1, k2, k3, k4, k5);
+        PropertyValuesHolder pvhScaleY = PropertyValuesHolder.ofKeyframe(View.SCALE_Y, k0, k1, k2, k3, k4, k5);
+
+        heartbeatAnimator = ObjectAnimator.ofPropertyValuesHolder(greetingHeart, pvhScaleX, pvhScaleY);
+        heartbeatAnimator.setDuration(1100L);
+        heartbeatAnimator.setRepeatCount(ValueAnimator.INFINITE);
+        heartbeatAnimator.setRepeatMode(ValueAnimator.RESTART);
+        heartbeatAnimator.setInterpolator(new AccelerateDecelerateInterpolator());
+        heartbeatAnimator.start();
+    }
+
+    private void stopHeartbeat() {
+        if (heartbeatAnimator != null) {
+            heartbeatAnimator.cancel();
+            heartbeatAnimator = null;
+        }
+        if (greetingHeart != null) {
+            greetingHeart.setScaleX(1.0f);
+            greetingHeart.setScaleY(1.0f);
+        }
     }
 
     // ---- race-weekend panel (a theme's race_calendar) -----------------------------------------------
