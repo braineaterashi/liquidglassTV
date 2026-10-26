@@ -63,7 +63,11 @@
             android:fontFamily="@font/outfit_medium"
             android:singleLine="true"
             android:ellipsize="marquee"
-            android:marqueeRepeatLimit="marquee_forever" />
+            android:marqueeRepeatLimit="marquee_forever"
+            android:shadowColor="#B3000000"
+            android:shadowDx="0"
+            android:shadowDy="2"
+            android:shadowRadius="6" />
 
         <TextView
             android:id="@+id/playerArtist"
@@ -71,11 +75,15 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
             android:text="Artist • Source"
-            android:textColor="#A6FFFFFF"
+            android:textColor="#CCFFFFFF"
             android:textSize="11.5sp"
             android:fontFamily="@font/outfit_regular"
             android:singleLine="true"
-            android:ellipsize="end" />
+            android:ellipsize="end"
+            android:shadowColor="#99000000"
+            android:shadowDx="0"
+            android:shadowDy="1.5"
+            android:shadowRadius="4" />
     </LinearLayout>
 
     <!-- Visualizer and Playback Controls -->

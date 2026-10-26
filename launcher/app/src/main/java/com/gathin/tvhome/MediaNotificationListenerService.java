@@ -152,9 +152,11 @@ public class MediaNotificationListenerService extends NotificationListenerServic
             artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST);
             if (artist == null) artist = metadata.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST);
             if (artist == null) artist = metadata.getString(MediaMetadata.METADATA_KEY_AUTHOR);
+            if (artist == null) artist = metadata.getString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE);
 
             art = metadata.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART);
             if (art == null) art = metadata.getBitmap(MediaMetadata.METADATA_KEY_ART);
+            if (art == null) art = metadata.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON);
         }
 
         String pkg = currentController.getPackageName();
@@ -184,15 +186,19 @@ public class MediaNotificationListenerService extends NotificationListenerServic
 
     private String getAppLabel(String packageName) {
         if (packageName == null) return "TV";
+        String lower = packageName.toLowerCase();
+        if (lower.contains("apple") || lower.equals("com.apple.android.music")) return "Apple Music";
+        if (lower.contains("youtube.tvmusic")) return "YouTube Music";
+        if (lower.contains("youtube")) return "YouTube";
+        if (lower.contains("spotify")) return "Spotify";
+        if (lower.contains("netflix")) return "Netflix";
+
         try {
             PackageManager pm = getPackageManager();
             ApplicationInfo info = pm.getApplicationInfo(packageName, 0);
             CharSequence label = pm.getApplicationLabel(info);
             return label != null ? label.toString() : packageName;
         } catch (Exception e) {
-            if (packageName.contains("youtube")) return "YouTube";
-            if (packageName.contains("spotify")) return "Spotify";
-            if (packageName.contains("netflix")) return "Netflix";
             return "TV";
         }
     }

@@ -60,7 +60,9 @@ import android.view.SoundEffectConstants;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.view.Window;
+import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.AnimationUtils;
+import android.view.animation.DecelerateInterpolator;
 import android.view.animation.LayoutAnimationController;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -154,6 +156,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private int ambientColor = -1;
     private ValueAnimator ambientAnimator;
     private NowPlayingManager.OnTrackChangeListener mediaTrackListener;
+    private final Handler hudDismissHandler = new Handler(Looper.getMainLooper());
+    private Runnable hudDismissRunnable;
+    private String lastTrackKey = "";
     private boolean heroShown;
     private boolean animations;
     private boolean advancedEffects;
@@ -518,14 +523,69 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         TextView btnPlayerNext = miniPlayer.findViewById(R.id.btnPlayerNext);
         View playerTextContainer = miniPlayer.findViewById(R.id.playerTextContainer);
 
+        hudDismissRunnable = () -> {
+            if (miniPlayer.hasFocus()) {
+                hudDismissHandler.postDelayed(hudDismissRunnable, 2500L);
+                return;
+            }
+            miniPlayer.animate().cancel();
+            miniPlayer.animate()
+                    .translationY(-28 * density)
+                    .translationX(45 * density)
+                    .scaleX(0.90f)
+                    .scaleY(0.90f)
+                    .alpha(0f)
+                    .setDuration(750)
+                    .setInterpolator(new AccelerateDecelerateInterpolator())
+                    .withEndAction(() -> {
+                        miniPlayer.setVisibility(View.GONE);
+                        if (topButtons != null) {
+                            topButtons.setVisibility(View.VISIBLE);
+                            topButtons.animate().cancel();
+                            topButtons.animate().alpha(1f).setDuration(300).start();
+                        }
+                    })
+                    .start();
+        };
+
+        View.OnFocusChangeListener playerFocusListener = (v, hasFocus) -> {
+            if (hasFocus) {
+                hudDismissHandler.removeCallbacks(hudDismissRunnable);
+                miniPlayer.animate().cancel();
+                miniPlayer.setAlpha(1f);
+                miniPlayer.setTranslationY(0f);
+                miniPlayer.setTranslationX(0f);
+                miniPlayer.setScaleX(1f);
+                miniPlayer.setScaleY(1f);
+            } else {
+                hudDismissHandler.removeCallbacks(hudDismissRunnable);
+                hudDismissHandler.postDelayed(hudDismissRunnable, 3500L);
+            }
+        };
+
         if (btnPlayerPrev != null) {
-            btnPlayerPrev.setOnClickListener(v -> NowPlayingManager.getInstance().previous());
+            btnPlayerPrev.setOnFocusChangeListener(playerFocusListener);
+            btnPlayerPrev.setOnClickListener(v -> {
+                NowPlayingManager.getInstance().previous();
+                hudDismissHandler.removeCallbacks(hudDismissRunnable);
+                hudDismissHandler.postDelayed(hudDismissRunnable, 4500L);
+            });
         }
         if (btnPlayerPlayPause != null) {
-            btnPlayerPlayPause.setOnClickListener(v -> NowPlayingManager.getInstance().togglePlayPause());
+            btnPlayerPlayPause.setOnFocusChangeListener(playerFocusListener);
+            btnPlayerPlayPause.setOnClickListener(v -> {
+                NowPlayingManager.getInstance().togglePlayPause();
+                hudDismissHandler.removeCallbacks(hudDismissRunnable);
+                hudDismissHandler.postDelayed(hudDismissRunnable, 4500L);
+            });
         }
         if (btnPlayerNext != null) {
-            btnPlayerNext.setOnClickListener(v -> NowPlayingManager.getInstance().next());
+            btnPlayerNext.setOnFocusChangeListener(playerFocusListener);
+            btnPlayerNext.setOnClickListener(v -> {
+                NowPlayingManager.getInstance().next();
+                hudDismissHandler.removeCallbacks(hudDismissRunnable);
+                hudDismissHandler.postDelayed(hudDismissRunnable, 4500L);
+            });
         }
         View.OnClickListener openAppAction = v -> NowPlayingManager.getInstance().openApp(MainActivity.this);
         miniPlayer.setOnClickListener(openAppAction);
@@ -537,12 +597,18 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             @Override
             public void onTrackUpdated(@androidx.annotation.Nullable MediaTrack track) {
                 if (track == null) {
+                    hudDismissHandler.removeCallbacks(hudDismissRunnable);
+                    lastTrackKey = "";
                     if (miniPlayer.getVisibility() == View.VISIBLE) {
                         miniPlayer.animate().cancel();
                         miniPlayer.animate()
-                                .translationX(350 * density)
+                                .translationY(-28 * density)
+                                .translationX(45 * density)
+                                .scaleX(0.90f)
+                                .scaleY(0.90f)
                                 .alpha(0f)
-                                .setDuration(280)
+                                .setDuration(600)
+                                .setInterpolator(new AccelerateDecelerateInterpolator())
                                 .withEndAction(() -> {
                                     miniPlayer.setVisibility(View.GONE);
                                     if (equalizerBars != null) equalizerBars.setPlaying(false);
@@ -596,22 +662,43 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     equalizerBars.setPlaying(track.isPlaying);
                 }
 
-                if (miniPlayer.getVisibility() != View.VISIBLE) {
+                String currentKey = track.title + "|" + track.artist + "|" + track.isPlaying;
+                boolean isNewSong = !currentKey.equals(lastTrackKey);
+                lastTrackKey = currentKey;
+
+                // Only show if playing, or if it's a new song update
+                if (track.isPlaying || isNewSong) {
                     if (topButtons != null && topButtons.getVisibility() == View.VISIBLE) {
                         topButtons.animate().cancel();
-                        topButtons.animate().alpha(0f).setDuration(220)
+                        topButtons.animate().alpha(0f).setDuration(200)
                                 .withEndAction(() -> topButtons.setVisibility(View.INVISIBLE)).start();
                     }
+
                     miniPlayer.setVisibility(View.VISIBLE);
                     miniPlayer.bringToFront();
                     miniPlayer.animate().cancel();
-                    miniPlayer.setTranslationX(350 * density);
-                    miniPlayer.setAlpha(0f);
+
+                    if (miniPlayer.getAlpha() < 0.1f) {
+                        miniPlayer.setAlpha(0f);
+                        miniPlayer.setTranslationY(-22 * density);
+                        miniPlayer.setTranslationX(45 * density);
+                        miniPlayer.setScaleX(0.92f);
+                        miniPlayer.setScaleY(0.92f);
+                    }
+
                     miniPlayer.animate()
-                            .translationX(0)
-                            .alpha(1f)
-                            .setDuration(320)
+                            .translationY(0f)
+                            .translationX(0f)
+                            .scaleX(1.0f)
+                            .scaleY(1.0f)
+                            .alpha(1.0f)
+                            .setDuration(450)
+                            .setInterpolator(new DecelerateInterpolator(1.6f))
                             .start();
+
+                    // Automatically float away and fade out after 6.5 seconds!
+                    hudDismissHandler.removeCallbacks(hudDismissRunnable);
+                    hudDismissHandler.postDelayed(hudDismissRunnable, 6500L);
                 }
             }
         };
@@ -1185,6 +1272,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        hudDismissHandler.removeCallbacksAndMessages(null);
         if (mediaTrackListener != null) {
             NowPlayingManager.getInstance().removeListener(mediaTrackListener);
         }
