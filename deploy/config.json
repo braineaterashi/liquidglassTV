@@ -40,7 +40,7 @@
     "dock_opacity": 40,
     "wallpaper_true_color": true,
     "wallpaper": true,
-    "wallpaper_rotation_minutes": 60,
+    "wallpaper_rotation_minutes": 10,
     "wallpaper_order": "shuffle",
     "fill_dock": false,
     "icon_only_buttons": true,
