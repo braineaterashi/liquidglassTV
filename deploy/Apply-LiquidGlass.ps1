@@ -35,6 +35,9 @@ if (-not $SkipApkInstall -and (Test-Path $apkPath)) {
     & $adb -s $target shell "pm grant $pkg android.permission.BLUETOOTH_ADVERTISE 2>/dev/null || true"
     & $adb -s $target shell "pm grant $pkg android.permission.SYSTEM_ALERT_WINDOW 2>/dev/null || true"
     & $adb -s $target shell "appops set $pkg SYSTEM_ALERT_WINDOW allow 2>/dev/null || true"
+    Write-Host "  -> Enabling Remote Shortcut Keys & Settings button (Accessibility)..." -ForegroundColor Yellow
+    & $adb -s $target shell "cmd appops set $pkg AUTO_START allow 2>/dev/null || true"
+    & $adb -s $target shell "settings put secure enabled_accessibility_services com.gathin.tvhome/com.gathin.tvhome.HomeKeyService:com.gathin.tvhome/com.gathin.tvhome.InputKeyService; settings put secure accessibility_enabled 1"
 } else {
     Write-Host "[2/4] Skipping APK install..." -ForegroundColor DarkGray
 }
@@ -73,8 +76,12 @@ if (Test-Path $wallpapersDir -PathType Container) {
 $revision = [guid]::NewGuid().ToString('N')
 & $adb -s $target shell "printf '%s' '$revision' > $tmp-theme_revision; cp $tmp-theme_revision $dir/theme_revision 2>/dev/null || content write --uri $uri/theme_revision < $tmp-theme_revision; rm -f $tmp-theme_revision"
 
-# 5. Restart Launcher
+# 5. Restart Launcher & Enable Remote Shortcut Key Service
 Write-Host "[4/4] Restarting CleanYourTV launcher..." -ForegroundColor Yellow
 & $adb -s $target shell "am force-stop $pkg; am start -n $pkg/.MainActivity"
+Start-Sleep -Seconds 1
+Write-Host "  -> Activating remote shortcut key helpers..." -ForegroundColor Yellow
+& $adb -s $target shell "cmd appops set $pkg AUTO_START allow 2>/dev/null || true"
+& $adb -s $target shell "settings put secure enabled_accessibility_services com.gathin.tvhome/com.gathin.tvhome.HomeKeyService:com.gathin.tvhome/com.gathin.tvhome.InputKeyService; settings put secure accessibility_enabled 1"
 
 Write-Host "=== Done! Liquid Glass theme is live on your TV ===" -ForegroundColor Green

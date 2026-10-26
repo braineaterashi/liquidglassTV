@@ -37,5 +37,29 @@
     "wallpaper_order": "shuffle",
     "fill_dock": false,
     "icon_only_buttons": true,
-    "background_color": "#030406"
+    "background_color": "#030406",
+    "settings_key_keycodes": [83, 176, 4077, 240],
+    "settings_key_scancodes": [561],
+    "settings_key_panel": false,
+    "input_key_keycodes": [178, 170],
+    "app_keys": [
+        "4062:com.netflix.ninja",
+        "191:com.netflix.ninja",
+        "scan:472:com.netflix.ninja",
+        "scan:566:com.netflix.ninja",
+        "4065:com.google.android.youtube.tv",
+        "190:com.google.android.youtube.tv",
+        "scan:485:com.google.android.youtube.tv",
+        "4099:com.amazon.amazonvideo.livingroom",
+        "195:com.amazon.amazonvideo.livingroom",
+        "scan:752:com.amazon.amazonvideo.livingroom",
+        "scan:490:com.amazon.amazonvideo.livingroom",
+        "4098:in.startv.hotstar",
+        "4063:in.startv.hotstar",
+        "192:in.startv.hotstar",
+        "scan:491:in.startv.hotstar",
+        "4100:com.sonyliv",
+        "4067:com.sonyliv",
+        "4064:com.tcl.channelplus"
+    ]
 }
