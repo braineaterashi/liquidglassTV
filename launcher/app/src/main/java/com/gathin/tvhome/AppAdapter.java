@@ -14,10 +14,12 @@ import android.graphics.Color;
 import android.graphics.Outline;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.provider.Settings;
 import android.util.DisplayMetrics;
+import android.util.LruCache;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -32,6 +34,7 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -316,11 +319,13 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         notifyDataSetChanged();
     }
 
+    private final LruCache<String, Drawable> transparentBannerCache = new LruCache<>(40);
+
     /** A banner_* drawable bundled with the launcher, or null for none or a name that is not one. */
     private Drawable bundledBanner(String name) {
         if (name == null || !name.startsWith("banner_")) return null;
         int id = ctx.getResources().getIdentifier(name, "drawable", ctx.getPackageName());
-        return id != 0 ? ctx.getDrawable(id) : null;
+        return id != 0 ? makeTransparentBanner(name, ctx.getDrawable(id)) : null;
     }
 
     private Drawable loadBanner(PackageManager pm, ResolveInfo ri) {
@@ -330,15 +335,19 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         if (id != 0) {
             try {
                 Resources resources = pm.getResourcesForApplication(ri.activityInfo.applicationInfo);
-                // Keep at least xhdpi detail rather than downsampling artwork before the focus zoom.
-                int density = Math.max(DisplayMetrics.DENSITY_XHIGH, ctx.getResources().getDisplayMetrics().densityDpi);
+                // Keep at least xxhdpi detail rather than downsampling artwork before the focus zoom.
+                int density = Math.max(DisplayMetrics.DENSITY_XXHIGH, ctx.getResources().getDisplayMetrics().densityDpi);
                 banner = resources.getDrawableForDensity(id, density, null);
             } catch (PackageManager.NameNotFoundException | Resources.NotFoundException ignored) {
             }
         }
         if (banner == null) banner = ri.activityInfo.loadBanner(pm);
         // A square "banner" counts as none: the tile shows the app's icon and name instead of a blur.
-        return banner != null && isBannerShaped(banner.getIntrinsicWidth(), banner.getIntrinsicHeight()) ? banner : null;
+        if (banner != null && isBannerShaped(banner.getIntrinsicWidth(), banner.getIntrinsicHeight())) {
+            String pkg = ri.activityInfo != null ? ri.activityInfo.packageName : null;
+            return makeTransparentBanner(pkg, banner);
+        }
+        return null;
     }
 
     /**
@@ -349,8 +358,215 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         return width <= 0 || height <= 0 || width >= height * 1.4f;
     }
 
+    /**
+     * Converts an app's solid or gradient background banner into a pure transparent logo icon,
+     * allowing the liquid glass tile and OLED wallpaper to shine through seamlessly.
+     */
+    private Drawable makeTransparentBanner(String key, Drawable banner) {
+        if (banner == null) return null;
+        if (key != null) {
+            Drawable cached = transparentBannerCache.get(key);
+            if (cached != null) return cached;
+        }
+
+        try {
+            int origW = banner.getIntrinsicWidth();
+            int origH = banner.getIntrinsicHeight();
+            if (origW <= 0 || origH <= 0) return banner;
+
+            // Target size for processing: up to 640px width maintains ultra-crisp font details
+            int w = Math.min(origW, 640);
+            int h = Math.round((float) origH * (float) w / (float) origW);
+            if (h <= 0) h = Math.round(w * 9f / 16f);
+
+            Bitmap src = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(src);
+            banner.setBounds(0, 0, w, h);
+            banner.draw(canvas);
+
+            int total = w * h;
+            int[] pixels = new int[total];
+            src.getPixels(pixels, 0, w, 0, 0, w, h);
+
+            // 1. Check if the banner already has transparency (e.g. transparent PNG/vector)
+            int transCount = 0;
+            int step = Math.max(1, total / 300);
+            for (int i = 0; i < total; i += step) {
+                if (((pixels[i] >>> 24) & 0xFF) < 150) transCount++;
+            }
+            if (transCount > (total / step) * 0.08f) {
+                src.recycle();
+                if (key != null) transparentBannerCache.put(key, banner);
+                return banner;
+            }
+
+            // 2. Sample corner colors inset safely to avoid any rounded masks or 1px borders
+            int insetX = Math.max(4, Math.min(18, w / 16));
+            int insetY = Math.max(4, Math.min(12, h / 16));
+
+            int cTL = sampleAvgColor(pixels, w, h, insetX, insetY);
+            int cTR = sampleAvgColor(pixels, w, h, w - 1 - insetX, insetY);
+            int cBL = sampleAvgColor(pixels, w, h, insetX, h - 1 - insetY);
+            int cBR = sampleAvgColor(pixels, w, h, w - 1 - insetX, h - 1 - insetY);
+
+            int rTL = (cTL >> 16) & 0xFF, gTL = (cTL >> 8) & 0xFF, bTL = cTL & 0xFF;
+            int rTR = (cTR >> 16) & 0xFF, gTR = (cTR >> 8) & 0xFF, bTR = cTR & 0xFF;
+            int rBL = (cBL >> 16) & 0xFF, gBL = (cBL >> 8) & 0xFF, bBL = cBL & 0xFF;
+            int rBR = (cBR >> 16) & 0xFF, gBR = (cBR >> 8) & 0xFF, bBR = cBR & 0xFF;
+
+            int diffTL_TR = Math.abs(rTL - rTR) + Math.abs(gTL - gTR) + Math.abs(bTL - bTR);
+            int diffTL_BL = Math.abs(rTL - rBL) + Math.abs(gTL - gBL) + Math.abs(bTL - bBL);
+            int diffTR_BR = Math.abs(rTR - rBR) + Math.abs(gTR - gBR) + Math.abs(bTR - bBR);
+            int diffBL_BR = Math.abs(rBL - rBR) + Math.abs(gBL - gBR) + Math.abs(bBL - bBR);
+
+            // Allow solid colors, horizontal gradients (JioHotstar), and vertical gradients:
+            boolean isSolid = (diffTL_TR <= 65 && diffTL_BL <= 65 && diffBL_BR <= 65);
+            boolean isHGradient = (diffTL_BL <= 65 && diffTR_BR <= 65);
+            boolean isVGradient = (diffTL_TR <= 65 && diffBL_BR <= 65);
+            boolean isSmoothGradient = isSolid || isHGradient || isVGradient
+                    || (diffTL_BL + diffTR_BR < 180) || (diffTL_TR + diffBL_BR < 180);
+
+            if (!isSmoothGradient) {
+                src.recycle();
+                if (key != null) transparentBannerCache.put(key, banner);
+                return banner;
+            }
+
+            // 3. BFS flood fill from all 4 boundaries to remove outer background
+            boolean[] visited = new boolean[total];
+            ArrayDeque<Integer> queue = new ArrayDeque<>(w * 2 + h * 2);
+
+            // Calibrated tolerance: 22 avoids eating thin letter strokes (YouTube) while clearing background
+            int tol = 22;
+
+            for (int d = 0; d <= Math.min(2, insetY / 2); d++) {
+                for (int x = 0; x < w; x++) {
+                    checkAndEnqueue(d, x, w, h, pixels, visited, queue, rTL, gTL, bTL, rTR, gTR, bTR, rBL, gBL, bBL, rBR, gBR, bBR, tol);
+                    checkAndEnqueue(h - 1 - d, x, w, h, pixels, visited, queue, rTL, gTL, bTL, rTR, gTR, bTR, rBL, gBL, bBL, rBR, gBR, bBR, tol);
+                }
+                for (int y = 0; y < h; y++) {
+                    checkAndEnqueue(y, d, w, h, pixels, visited, queue, rTL, gTL, bTL, rTR, gTR, bTR, rBL, gBL, bBL, rBR, gBR, bBR, tol);
+                    checkAndEnqueue(y, w - 1 - d, w, h, pixels, visited, queue, rTL, gTL, bTL, rTR, gTR, bTR, rBL, gBL, bBL, rBR, gBR, bBR, tol);
+                }
+            }
+
+            while (!queue.isEmpty()) {
+                int idx = queue.poll();
+                pixels[idx] = 0x00000000; // Clear to transparent!
+
+                int y = idx / w;
+                int x = idx % w;
+
+                if (x > 0) checkAndEnqueue(y, x - 1, w, h, pixels, visited, queue, rTL, gTL, bTL, rTR, gTR, bTR, rBL, gBL, bBL, rBR, gBR, bBR, tol);
+                if (x < w - 1) checkAndEnqueue(y, x + 1, w, h, pixels, visited, queue, rTL, gTL, bTL, rTR, gTR, bTR, rBL, gBL, bBL, rBR, gBR, bBR, tol);
+                if (y > 0) checkAndEnqueue(y - 1, x, w, h, pixels, visited, queue, rTL, gTL, bTL, rTR, gTR, bTR, rBL, gBL, bBL, rBR, gBR, bBR, tol);
+                if (y < h - 1) checkAndEnqueue(y + 1, x, w, h, pixels, visited, queue, rTL, gTL, bTL, rTR, gTR, bTR, rBL, gBL, bBL, rBR, gBR, bBR, tol);
+            }
+
+            // 4. Secondary pass: clear enclosed background pixels (e.g. inside 'O', 'P')
+            // and perform un-premultiplied anti-alias edge smoothing to eliminate color halos
+            int feather = 30;
+            for (int y = 0; y < h; y++) {
+                float yRatio = (float) y / (float) (h - 1);
+                int rLeft = Math.round(rTL + (rBL - rTL) * yRatio);
+                int gLeft = Math.round(gTL + (gBL - gTL) * yRatio);
+                int bLeft = Math.round(bTL + (bBL - bTL) * yRatio);
+
+                int rRight = Math.round(rTR + (rBR - rTR) * yRatio);
+                int gRight = Math.round(gTR + (gBR - gTR) * yRatio);
+                int bRight = Math.round(bTR + (bBR - bTR) * yRatio);
+
+                for (int x = 0; x < w; x++) {
+                    int idx = y * w + x;
+                    int p = pixels[idx];
+                    if (((p >>> 24) & 0xFF) == 0) continue; // Already transparent
+
+                    float xRatio = (float) x / (float) (w - 1);
+                    int expR = Math.round(rLeft + (rRight - rLeft) * xRatio);
+                    int expG = Math.round(gLeft + (gRight - gLeft) * xRatio);
+                    int expB = Math.round(bLeft + (bRight - bLeft) * xRatio);
+
+                    int pr = (p >> 16) & 0xFF, pg = (p >> 8) & 0xFF, pb = p & 0xFF;
+                    int dist = Math.abs(pr - expR) + Math.abs(pg - expG) + Math.abs(pb - expB);
+
+                    if (dist <= tol) {
+                        pixels[idx] = 0x00000000;
+                    } else if (dist < tol + feather) {
+                        // Anti-alias edge feathering with background un-premultiplication
+                        // Eliminates the pink fringe on Netflix and gray fringe on YouTube
+                        float alphaFactor = (float) (dist - tol) / (float) feather;
+                        int a = Math.max(1, Math.min(255, Math.round(alphaFactor * 255f)));
+                        int cleanR = Math.max(0, Math.min(255, Math.round((pr - (1f - alphaFactor) * expR) / alphaFactor)));
+                        int cleanG = Math.max(0, Math.min(255, Math.round((pg - (1f - alphaFactor) * expG) / alphaFactor)));
+                        int cleanB = Math.max(0, Math.min(255, Math.round((pb - (1f - alphaFactor) * expB) / alphaFactor)));
+                        pixels[idx] = (a << 24) | (cleanR << 16) | (cleanG << 8) | cleanB;
+                    }
+                }
+            }
+
+            Bitmap out = Bitmap.createBitmap(pixels, w, h, Bitmap.Config.ARGB_8888);
+            src.recycle();
+            Drawable result = new BitmapDrawable(ctx.getResources(), out);
+            if (key != null) transparentBannerCache.put(key, result);
+            return result;
+        } catch (Exception e) {
+            return banner;
+        }
+    }
+
+    private static int sampleAvgColor(int[] pixels, int w, int h, int cx, int cy) {
+        int r = 0, g = 0, b = 0, count = 0;
+        for (int dy = -1; dy <= 1; dy++) {
+            int ny = cy + dy;
+            if (ny < 0 || ny >= h) continue;
+            for (int dx = -1; dx <= 1; dx++) {
+                int nx = cx + dx;
+                if (nx < 0 || nx >= w) continue;
+                int p = pixels[ny * w + nx];
+                r += (p >> 16) & 0xFF;
+                g += (p >> 8) & 0xFF;
+                b += p & 0xFF;
+                count++;
+            }
+        }
+        return count > 0 ? Color.rgb(r / count, g / count, b / count) : pixels[cy * w + cx];
+    }
+
+    private static void checkAndEnqueue(int y, int x, int w, int h, int[] pixels, boolean[] visited,
+                                        ArrayDeque<Integer> queue,
+                                        int rTL, int gTL, int bTL, int rTR, int gTR, int bTR,
+                                        int rBL, int gBL, int bBL, int rBR, int gBR, int bBR, int tol) {
+        int idx = y * w + x;
+        if (visited[idx]) return;
+        visited[idx] = true;
+
+        float yRatio = (float) y / (float) (h - 1);
+        float xRatio = (float) x / (float) (w - 1);
+
+        int rLeft = Math.round(rTL + (rBL - rTL) * yRatio);
+        int gLeft = Math.round(gTL + (gBL - gTL) * yRatio);
+        int bLeft = Math.round(bTL + (bBL - bTL) * yRatio);
+
+        int rRight = Math.round(rTR + (rBR - rTR) * yRatio);
+        int gRight = Math.round(gTR + (gBR - gTR) * yRatio);
+        int bRight = Math.round(bTR + (bBR - bTR) * yRatio);
+
+        int expR = Math.round(rLeft + (rRight - rLeft) * xRatio);
+        int expG = Math.round(gLeft + (gRight - gLeft) * xRatio);
+        int expB = Math.round(bLeft + (bRight - bLeft) * xRatio);
+
+        int p = pixels[idx];
+        int pr = (p >> 16) & 0xFF, pg = (p >> 8) & 0xFF, pb = p & 0xFF;
+        int dist = Math.abs(pr - expR) + Math.abs(pg - expG) + Math.abs(pb - expB);
+
+        if (dist <= tol + 8) {
+            queue.add(idx);
+        }
+    }
+
     /** Lets go of every tile and its artwork (Home is in the background and memory is short). */
     void clear() {
+        transparentBannerCache.evictAll();
         items.clear();
         notifyDataSetChanged();
     }
@@ -424,8 +640,8 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         h.card.setTranslationZ(focused && advancedEffects ? 8f * ctx.getResources().getDisplayMetrics().density : 0f);
         h.banner.setScaleX(focused && advancedEffects ? 1.035f : 1f);
         h.banner.setScaleY(focused && advancedEffects ? 1.035f : 1f);
-        h.banner.setAlpha(focused ? 0.88f : 0.68f);
-        h.icon.setAlpha(focused ? 0.95f : 0.72f);
+        h.banner.setAlpha(focused ? 1.0f : 0.88f);
+        h.icon.setAlpha(focused ? 1.0f : 0.85f);
         h.card.setBackground(h.cardBackground);
         if (e.banner != null) {
             h.banner.setImageDrawable(e.banner);
@@ -727,8 +943,8 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
                     view.setTranslationZ(0f);
                     banner.setScaleX(1f);
                     banner.setScaleY(1f);
-                    banner.setAlpha(focused ? 0.88f : 0.68f);
-                    icon.setAlpha(focused ? 0.95f : 0.72f);
+                    banner.setAlpha(focused ? 1.0f : 0.88f);
+                    icon.setAlpha(focused ? 1.0f : 0.85f);
                     name.setAlpha(focused ? 1f : restNameAlpha);
                     name.setTranslationY(0f);
                 } else if (reducedMotion) {
@@ -740,8 +956,8 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
                             .setDuration(focused ? Motion.REDUCED_MS : 60)
                             .setInterpolator(new DecelerateInterpolator())
                             .start();
-                    banner.animate().alpha(focused ? 0.88f : 0.68f).setDuration(focused ? Motion.REDUCED_MS : 60).start();
-                    icon.animate().alpha(focused ? 0.95f : 0.72f).setDuration(focused ? Motion.REDUCED_MS : 60).start();
+                    banner.animate().alpha(focused ? 1.0f : 0.88f).setDuration(focused ? Motion.REDUCED_MS : 60).start();
+                    icon.animate().alpha(focused ? 1.0f : 0.85f).setDuration(focused ? Motion.REDUCED_MS : 60).start();
                     name.setAlpha(focused ? 1f : restNameAlpha);
                     // Same place as the full motion's slide ends: the layout's -6dp is only its starting point, and
                     // left there the name overlaps the zoomed tile.
@@ -757,13 +973,13 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
                             .withLayer().start();
                     if (advancedEffects) {
                         banner.animate().scaleX(focused ? 1.035f : 1f).scaleY(focused ? 1.035f : 1f)
-                                .alpha(focused ? 0.88f : 0.68f)
+                                .alpha(focused ? 1.0f : 0.88f)
                                 .setDuration(280).start();
                     } else {
-                        banner.animate().alpha(focused ? 0.88f : 0.68f)
+                        banner.animate().alpha(focused ? 1.0f : 0.88f)
                                 .setDuration(focused ? 260 : 180).start();
                     }
-                    icon.animate().alpha(focused ? 0.95f : 0.72f)
+                    icon.animate().alpha(focused ? 1.0f : 0.85f)
                             .setDuration(advancedEffects ? 220 : (focused ? 260 : 180)).start();
                     name.animate().alpha(focused ? 1f : restNameAlpha)
                             .translationY(focused ? density * 4f : -density * 6f)
