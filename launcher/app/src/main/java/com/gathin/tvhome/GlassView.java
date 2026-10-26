@@ -75,36 +75,23 @@ public class GlassView extends View {
         float inset = 10f * density;   // room for the vibrant glow halo
         rect.set(inset, inset, getWidth() - inset, getHeight() - inset);
 
-        // Outer glow: 16 smooth concentric rings tightly hugging the exact icon boundary
-        int rings = 16;
+        // Radiant neon glow: 20 smooth concentric rings radiating seamlessly from the icon boundary
+        int rings = 20;
         float step = inset / rings;
         glow.setStrokeWidth(step + 0.6f);
         for (int i = 0; i < rings; i++) {
             float o = step * (i + 0.5f);
             float t = 1f - (float) i / rings;
-            float falloff = (float) Math.pow(t, 1.4);
+            float falloff = (float) Math.pow(t, 1.5);
             glow.setColor(Math.round(glowAlpha * falloff) << 24 | glowRgb);
-            float rOut = radius + o * 0.65f;
+            float rOut = radius + o * 0.7f;
             canvas.drawRoundRect(rect.left - o, rect.top - o, rect.right + o, rect.bottom + o, rOut, rOut, glow);
         }
 
-        // Inner luminous contour hugging the inside of the rim
-        glow.setStrokeWidth(1.2f * density);
-        glow.setColor((Math.round(glowAlpha * 0.40f) << 24) | glowRgb);
-        canvas.drawRoundRect(rect.left + density * 0.5f, rect.top + density * 0.5f,
-                rect.right - density * 0.5f, rect.bottom - density * 0.5f,
-                Math.max(0, radius - density * 0.5f), Math.max(0, radius - density * 0.5f), glow);
-
-        // Sheer transparent glass fill
-        canvas.drawRoundRect(rect, radius, radius, fill);
-
-        // Sheen across the top 35%
+        // Delicate top specular reflection (no hard boundary lines or inner strokes)
         canvas.save();
-        canvas.clipRect(rect.left, rect.top, rect.right, rect.top + rect.height() * 0.35f);
+        canvas.clipRect(rect.left, rect.top, rect.right, rect.top + rect.height() * 0.30f);
         canvas.drawRoundRect(rect, radius, radius, specular);
         canvas.restore();
-
-        // Exact boundary rim stroke
-        canvas.drawRoundRect(rect, radius, radius, rim);
     }
 }

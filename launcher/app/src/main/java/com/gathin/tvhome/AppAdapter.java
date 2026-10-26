@@ -346,6 +346,9 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             } else if ("com.android.vending".equals(pkg)) {
                 Drawable b = bundledBanner("banner_play");
                 if (b != null) return b;
+            } else if ("in.startv.hotstar".equals(pkg)) {
+                Drawable b = bundledBanner("banner_hotstar");
+                if (b != null) return b;
             }
         }
         int id = ri.activityInfo.banner;

@@ -30,7 +30,8 @@
         "com.netflix.ninja=banner_netflix",
         "com.google.android.youtube.tv=banner_youtube",
         "com.google.android.youtube=banner_youtube",
-        "com.android.vending=banner_play"
+        "com.android.vending=banner_play",
+        "in.startv.hotstar=banner_hotstar"
     ],
     "show_inputs_pill": false,
     "dock_glass": true,
