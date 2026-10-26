@@ -60,9 +60,7 @@ import android.view.SoundEffectConstants;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.view.Window;
-import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.AnimationUtils;
-import android.view.animation.DecelerateInterpolator;
 import android.view.animation.LayoutAnimationController;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -155,12 +153,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private int glassAccent;
     private int ambientColor = -1;
     private ValueAnimator ambientAnimator;
-    private View miniPlayer;
-    private boolean isHomescreenVisible;
-    private NowPlayingManager.OnTrackChangeListener mediaTrackListener;
-    private final Handler hudDismissHandler = new Handler(Looper.getMainLooper());
-    private Runnable hudDismissRunnable;
-    private String lastTrackKey = "";
     private boolean heroShown;
     private boolean animations;
     private boolean advancedEffects;
@@ -445,33 +437,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         inAppBanner.setElevation(50 * density);
         root.addView(inAppBanner, inAppBannerLp);
 
-        View topButtons = findViewById(R.id.topButtons);
-
-        // Liquid Glass Mini Media Player (Top Right Corner)
-        miniPlayer = getLayoutInflater().inflate(R.layout.view_mini_player, root, false);
-        FrameLayout.LayoutParams miniPlayerLp = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.TOP | Gravity.END
-        );
-        miniPlayerLp.topMargin = (int) (24 * density);
-        miniPlayerLp.rightMargin = (int) (56 * density);
-        miniPlayer.setVisibility(View.GONE);
-        miniPlayer.setElevation(35 * density);
-        root.addView(miniPlayer, miniPlayerLp);
-        BackgroundYouTubeAudioPlayer.getInstance().init(this, root);
-
         CallBannerManager.getInstance(this).setInAppListener(new CallBannerManager.OnCallBannerListener() {
             private ObjectAnimator inAppPulse;
 
             @Override
             public void onShowBanner(String title, String subtitle) {
-                if (miniPlayer.getVisibility() == View.VISIBLE) {
-                    miniPlayer.animate().cancel();
-                    miniPlayer.animate().alpha(0f).translationX(350 * density).setDuration(200)
-                            .withEndAction(() -> miniPlayer.setVisibility(View.INVISIBLE)).start();
-                }
-
                 TextView t = inAppBanner.findViewById(R.id.callTitle);
                 TextView s = inAppBanner.findViewById(R.id.callSubtitle);
                 if (t != null) t.setText(title);
@@ -503,207 +473,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 }
                 inAppBanner.animate().cancel();
                 inAppBanner.animate().translationX(400 * density).alpha(0f).setDuration(280)
-                        .withEndAction(() -> {
-                            inAppBanner.setVisibility(View.GONE);
-                            MediaTrack active = NowPlayingManager.getInstance().getActiveTrack();
-                            if (active != null) {
-                                miniPlayer.setVisibility(View.VISIBLE);
-                                miniPlayer.bringToFront();
-                                miniPlayer.animate().cancel();
-                                miniPlayer.animate().alpha(1f).translationX(0).setDuration(280).start();
-                            }
-                        }).start();
+                        .withEndAction(() -> inAppBanner.setVisibility(View.GONE)).start();
             }
         });
-
-        TextView playerTitle = miniPlayer.findViewById(R.id.playerTitle);
-        TextView playerArtist = miniPlayer.findViewById(R.id.playerArtist);
-        ImageView playerArt = miniPlayer.findViewById(R.id.playerArt);
-        TextView playerIconBadge = miniPlayer.findViewById(R.id.playerIconBadge);
-        EqualizerBarsView equalizerBars = miniPlayer.findViewById(R.id.equalizerBars);
-        TextView btnPlayerPrev = miniPlayer.findViewById(R.id.btnPlayerPrev);
-        TextView btnPlayerPlayPause = miniPlayer.findViewById(R.id.btnPlayerPlayPause);
-        TextView btnPlayerNext = miniPlayer.findViewById(R.id.btnPlayerNext);
-        View playerTextContainer = miniPlayer.findViewById(R.id.playerTextContainer);
-
-        hudDismissRunnable = () -> {
-            if (miniPlayer.hasFocus()) {
-                hudDismissHandler.postDelayed(hudDismissRunnable, 2500L);
-                return;
-            }
-            MediaTrack cur = NowPlayingManager.getInstance().getActiveTrack();
-            if (cur != null && cur.isPlaying) {
-                // Keep visible indefinitely while music is playing!
-                return;
-            }
-            miniPlayer.animate().cancel();
-            miniPlayer.animate()
-                    .translationY(-28 * density)
-                    .translationX(45 * density)
-                    .scaleX(0.90f)
-                    .scaleY(0.90f)
-                    .alpha(0f)
-                    .setDuration(750)
-                    .setInterpolator(new AccelerateDecelerateInterpolator())
-                    .withEndAction(() -> {
-                        miniPlayer.setVisibility(View.GONE);
-                        if (topButtons != null) {
-                            topButtons.setVisibility(View.VISIBLE);
-                            topButtons.animate().cancel();
-                            topButtons.animate().alpha(1f).setDuration(300).start();
-                        }
-                    })
-                    .start();
-        };
-
-        View.OnFocusChangeListener playerFocusListener = (v, hasFocus) -> {
-            if (hasFocus) {
-                hudDismissHandler.removeCallbacks(hudDismissRunnable);
-                miniPlayer.animate().cancel();
-                miniPlayer.setAlpha(1f);
-                miniPlayer.setTranslationY(0f);
-                miniPlayer.setTranslationX(0f);
-                miniPlayer.setScaleX(1f);
-                miniPlayer.setScaleY(1f);
-            } else {
-                MediaTrack cur = NowPlayingManager.getInstance().getActiveTrack();
-                if (cur == null || !cur.isPlaying) {
-                    hudDismissHandler.removeCallbacks(hudDismissRunnable);
-                    hudDismissHandler.postDelayed(hudDismissRunnable, 3500L);
-                }
-            }
-        };
-
-        if (btnPlayerPrev != null) {
-            btnPlayerPrev.setOnFocusChangeListener(playerFocusListener);
-            btnPlayerPrev.setOnClickListener(v -> NowPlayingManager.getInstance().previous());
-        }
-        if (btnPlayerPlayPause != null) {
-            btnPlayerPlayPause.setOnFocusChangeListener(playerFocusListener);
-            btnPlayerPlayPause.setOnClickListener(v -> NowPlayingManager.getInstance().togglePlayPause());
-        }
-        if (btnPlayerNext != null) {
-            btnPlayerNext.setOnFocusChangeListener(playerFocusListener);
-            btnPlayerNext.setOnClickListener(v -> NowPlayingManager.getInstance().next());
-        }
-        View.OnClickListener openAppAction = v -> NowPlayingManager.getInstance().openApp(MainActivity.this);
-        miniPlayer.setOnClickListener(openAppAction);
-        if (playerTextContainer != null) {
-            playerTextContainer.setOnClickListener(openAppAction);
-        }
-
-        mediaTrackListener = new NowPlayingManager.OnTrackChangeListener() {
-            @Override
-            public void onTrackUpdated(@androidx.annotation.Nullable MediaTrack track) {
-                if (!isHomescreenVisible) {
-                    return;
-                }
-                if (track == null) {
-                    hudDismissHandler.removeCallbacks(hudDismissRunnable);
-                    lastTrackKey = "";
-                    if (miniPlayer.getVisibility() == View.VISIBLE) {
-                        miniPlayer.animate().cancel();
-                        miniPlayer.animate()
-                                .translationY(-28 * density)
-                                .translationX(45 * density)
-                                .scaleX(0.90f)
-                                .scaleY(0.90f)
-                                .alpha(0f)
-                                .setDuration(600)
-                                .setInterpolator(new AccelerateDecelerateInterpolator())
-                                .withEndAction(() -> {
-                                    miniPlayer.setVisibility(View.GONE);
-                                    if (equalizerBars != null) equalizerBars.setPlaying(false);
-                                    if (topButtons != null) {
-                                        topButtons.setVisibility(View.VISIBLE);
-                                        topButtons.animate().cancel();
-                                        topButtons.animate().alpha(1f).setDuration(250).start();
-                                    }
-                                })
-                                .start();
-                    }
-                    return;
-                }
-
-                if (playerTitle != null) {
-                    playerTitle.setText(track.title);
-                    playerTitle.setSelected(true);
-                }
-                if (playerArtist != null) {
-                    playerArtist.setText(track.artist + " • " + track.sourceName);
-                }
-
-                if (track.albumArt != null) {
-                    if (playerArt != null) {
-                        playerArt.setImageBitmap(track.albumArt);
-                        playerArt.setVisibility(View.VISIBLE);
-                    }
-                    if (playerIconBadge != null) playerIconBadge.setVisibility(View.GONE);
-                } else {
-                    if (playerArt != null) playerArt.setVisibility(View.GONE);
-                    if (playerIconBadge != null) {
-                        playerIconBadge.setVisibility(View.VISIBLE);
-                        String src = track.sourceName != null ? track.sourceName.toLowerCase() : "";
-                        if (src.contains("music")) {
-                            playerIconBadge.setText("🎵");
-                        } else if (src.contains("youtube")) {
-                            playerIconBadge.setText("▶");
-                        } else if (src.contains("spotify")) {
-                            playerIconBadge.setText("🎧");
-                        } else {
-                            playerIconBadge.setText("▶");
-                        }
-                    }
-                }
-
-                if (btnPlayerPlayPause != null) {
-                    btnPlayerPlayPause.setText(track.isPlaying ? "⏸" : "▶");
-                }
-
-                if (equalizerBars != null) {
-                    equalizerBars.setPlaying(track.isPlaying);
-                }
-
-                lastTrackKey = track.title + "|" + track.artist + "|" + track.isPlaying;
-
-                if (track.isPlaying) {
-                    hudDismissHandler.removeCallbacks(hudDismissRunnable);
-                    if (topButtons != null && topButtons.getVisibility() == View.VISIBLE) {
-                        topButtons.animate().cancel();
-                        topButtons.animate().alpha(0f).setDuration(200)
-                                .withEndAction(() -> topButtons.setVisibility(View.INVISIBLE)).start();
-                    }
-
-                    miniPlayer.setVisibility(View.VISIBLE);
-                    miniPlayer.bringToFront();
-                    miniPlayer.animate().cancel();
-
-                    if (miniPlayer.getAlpha() < 0.1f) {
-                        miniPlayer.setAlpha(0f);
-                        miniPlayer.setTranslationY(-22 * density);
-                        miniPlayer.setTranslationX(45 * density);
-                        miniPlayer.setScaleX(0.92f);
-                        miniPlayer.setScaleY(0.92f);
-                    }
-
-                    miniPlayer.animate()
-                            .translationY(0f)
-                            .translationX(0f)
-                            .scaleX(1.0f)
-                            .scaleY(1.0f)
-                            .alpha(1.0f)
-                            .setDuration(450)
-                            .setInterpolator(new DecelerateInterpolator(1.6f))
-                            .start();
-                } else {
-                    // Song paused: keep visible for 4.5s so user sees pause state, then gracefully float away
-                    hudDismissHandler.removeCallbacks(hudDismissRunnable);
-                    hudDismissHandler.postDelayed(hudDismissRunnable, 4500L);
-                }
-            }
-        };
-
-        NowPlayingManager.getInstance().addListener(mediaTrackListener);
         vpnApp = cfg.vpnApp;
         moduleCards = cfg.moduleCards;
         hiddenApps = new HashSet<>(cfg.hiddenApps);
@@ -1027,22 +799,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onResume() {
         super.onResume();
-        isHomescreenVisible = true;
         CallBannerManager.getInstance(this).setHomescreenVisible(true);
         AncsBleManager.getInstance(this).connectBondedDevices();
-
-        // Re-display mini player on homescreen if a song is playing
-        MediaTrack activeTrack = NowPlayingManager.getInstance().getActiveTrack();
-        if (activeTrack != null && activeTrack.isPlaying && mediaTrackListener != null) {
-            mediaTrackListener.onTrackUpdated(activeTrack);
-        }
-
-        // Keep YouTube audio playing in background when minimized to homescreen
-        handler.postDelayed(() -> {
-            if (isHomescreenVisible) {
-                NowPlayingManager.getInstance().resumeTvPlaybackIfYouTube(MainActivity.this);
-            }
-        }, 400L);
         // A festival that started or ended while Home was in the background: rebuild with or without it.
         if (festive != festival.active(LocalDate.now())) {
             recreate();
@@ -1223,18 +981,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onPause() {
         super.onPause();
-        isHomescreenVisible = false;
-        BackgroundYouTubeAudioPlayer.getInstance().stop();
-        hudDismissHandler.removeCallbacks(hudDismissRunnable);
-        if (miniPlayer != null) {
-            miniPlayer.animate().cancel();
-            miniPlayer.setVisibility(View.GONE);
-        }
-        View topButtons = findViewById(R.id.topButtons);
-        if (topButtons != null) {
-            topButtons.setVisibility(View.VISIBLE);
-            topButtons.setAlpha(1f);
-        }
         CallBannerManager.getInstance(this).setHomescreenVisible(false);
         root.removeCallbacks(showIdleClock);
         endReorder();   // Home or another app while reordering keeps the order so far
@@ -1251,40 +997,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (cardPrompt != null) cardPrompt.dismiss();
         if (appLibrary != null) appLibrary.close();
         if (openPopup != null) openPopup.dismiss();
-    }
-
-    @Override
-    public void startActivity(Intent intent, Bundle options) {
-        if (intent != null) {
-            String targetPkg = intent.getPackage();
-            if (targetPkg == null && intent.getComponent() != null) {
-                targetPkg = intent.getComponent().getPackageName();
-            }
-            if (targetPkg != null && !targetPkg.equals(getPackageName())) {
-                BackgroundYouTubeAudioPlayer.getInstance().stop();
-                if (!targetPkg.contains("youtube")) {
-                    NowPlayingManager.getInstance().pauseTvPlayback();
-                }
-            }
-        }
-        super.startActivity(intent, options);
-    }
-
-    @Override
-    public void startActivityForResult(Intent intent, int requestCode, Bundle options) {
-        if (intent != null) {
-            String targetPkg = intent.getPackage();
-            if (targetPkg == null && intent.getComponent() != null) {
-                targetPkg = intent.getComponent().getPackageName();
-            }
-            if (targetPkg != null && !targetPkg.equals(getPackageName())) {
-                BackgroundYouTubeAudioPlayer.getInstance().stop();
-                if (!targetPkg.contains("youtube")) {
-                    NowPlayingManager.getInstance().pauseTvPlayback();
-                }
-            }
-        }
-        super.startActivityForResult(intent, requestCode, options);
     }
 
     @Override
@@ -1332,10 +1044,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        hudDismissHandler.removeCallbacksAndMessages(null);
-        if (mediaTrackListener != null) {
-            NowPlayingManager.getInstance().removeListener(mediaTrackListener);
-        }
         CallBannerManager.getInstance(this).setHomescreenVisible(false);
         CallBannerManager.getInstance(this).setInAppListener(null);
         AncsBleManager.getInstance(this).stop();

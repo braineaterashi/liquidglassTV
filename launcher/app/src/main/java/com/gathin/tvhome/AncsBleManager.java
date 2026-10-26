@@ -58,10 +58,6 @@ public final class AncsBleManager {
     private final Queue<BluetoothGattDescriptor> descriptorQueue = new ArrayDeque<>();
     private boolean isWritingDescriptor = false;
 
-    private int lastCallUid = -1;
-    private int lastMediaUid = -1;
-    private String lastMediaTitle = "";
-
     private final BroadcastReceiver bluetoothReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -362,7 +358,6 @@ public final class AncsBleManager {
 
         // Check if this is an Incoming Call (CategoryID == 1)
         if (categoryId == 1) {
-            lastCallUid = uid;
             if (eventId == 0 || eventId == 1) { // Call Ringing / Started
                 Log.i(TAG, "INCOMING CALL DETECTED! UID=" + uid);
                 CallBannerManager.getInstance(context).showCall("Incoming Call", "iPhone • Ringing...");
@@ -370,15 +365,6 @@ public final class AncsBleManager {
             } else if (eventId == 2) { // Call Ended / Answered / Rejected
                 Log.i(TAG, "CALL ENDED / DISMISSED: UID=" + uid);
                 CallBannerManager.getInstance(context).dismiss();
-            }
-        } else if (categoryId == 11) { // CategoryIDEntertainment (Music/Audio playback from iPhone)
-            lastMediaUid = uid;
-            if (eventId == 0 || eventId == 1) {
-                Log.i(TAG, "ENTERTAINMENT/MUSIC NOTIFICATION DETECTED! UID=" + uid);
-                fetchNotificationAttributes(gatt, uid);
-            } else if (eventId == 2) {
-                Log.i(TAG, "ENTERTAINMENT NOTIFICATION REMOVED: UID=" + uid);
-                NowPlayingManager.getInstance().clearRemoteTrack();
             }
         }
     }
@@ -422,27 +408,11 @@ public final class AncsBleManager {
         int attributeId = data[5] & 0xFF;
         int length = (data[6] & 0xFF) | ((data[7] & 0xFF) << 8);
 
-        if (commandId == 0 && length > 0 && data.length >= 8 + length) {
-            String text = new String(data, 8, length, StandardCharsets.UTF_8).trim();
-            if (!TextUtils.isEmpty(text)) {
-                if (uid == lastCallUid && attributeId == 1) {
-                    Log.i(TAG, "Parsed caller name: " + text);
-                    CallBannerManager.getInstance(context).showCall(text, "iPhone • Ringing...");
-                } else if (uid == lastMediaUid) {
-                    if (attributeId == 1) {
-                        lastMediaTitle = text;
-                        Log.i(TAG, "Parsed media title: " + text);
-                        NowPlayingManager.getInstance().updateRemoteTrack(new MediaTrack(
-                                text, "iPhone", "iPhone", true, false, null, null
-                        ));
-                    } else if (attributeId == 3) {
-                        Log.i(TAG, "Parsed media artist: " + text);
-                        String currentTitle = !TextUtils.isEmpty(lastMediaTitle) ? lastMediaTitle : "Now Playing";
-                        NowPlayingManager.getInstance().updateRemoteTrack(new MediaTrack(
-                                currentTitle, text, "iPhone", true, false, null, null
-                        ));
-                    }
-                }
+        if (commandId == 0 && attributeId == 1 && length > 0 && data.length >= 8 + length) {
+            String callerName = new String(data, 8, length, StandardCharsets.UTF_8).trim();
+            if (!TextUtils.isEmpty(callerName)) {
+                Log.i(TAG, "Parsed caller name: " + callerName);
+                CallBannerManager.getInstance(context).showCall(callerName, "iPhone • Ringing...");
             }
         }
     }

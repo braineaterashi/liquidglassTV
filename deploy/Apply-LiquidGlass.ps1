@@ -38,8 +38,6 @@ if (-not $SkipApkInstall -and (Test-Path $apkPath)) {
     Write-Host "  -> Enabling Remote Shortcut Keys & Settings button (Accessibility)..." -ForegroundColor Yellow
     & $adb -s $target shell "cmd appops set $pkg AUTO_START allow 2>/dev/null || true"
     & $adb -s $target shell "settings put secure enabled_accessibility_services com.gathin.tvhome/com.gathin.tvhome.HomeKeyService:com.gathin.tvhome/com.gathin.tvhome.InputKeyService; settings put secure accessibility_enabled 1"
-    Write-Host "  -> Enabling Media Notification Listener for Liquid Glass Mini Player..." -ForegroundColor Yellow
-    & $adb -s $target shell "cmd notification allow_listener com.gathin.tvhome/.MediaNotificationListenerService 2>/dev/null || true"
 } else {
     Write-Host "[2/4] Skipping APK install..." -ForegroundColor DarkGray
 }
@@ -85,6 +83,5 @@ Start-Sleep -Seconds 1
 Write-Host "  -> Activating remote shortcut key helpers..." -ForegroundColor Yellow
 & $adb -s $target shell "cmd appops set $pkg AUTO_START allow 2>/dev/null || true"
 & $adb -s $target shell "settings put secure enabled_accessibility_services com.gathin.tvhome/com.gathin.tvhome.HomeKeyService:com.gathin.tvhome/com.gathin.tvhome.InputKeyService; settings put secure accessibility_enabled 1"
-& $adb -s $target shell "cmd notification allow_listener com.gathin.tvhome/.MediaNotificationListenerService 2>/dev/null || true"
 
 Write-Host "=== Done! Liquid Glass theme is live on your TV ===" -ForegroundColor Green
