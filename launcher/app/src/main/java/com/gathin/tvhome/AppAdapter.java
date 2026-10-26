@@ -325,10 +325,29 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private Drawable bundledBanner(String name) {
         if (name == null || !name.startsWith("banner_")) return null;
         int id = ctx.getResources().getIdentifier(name, "drawable", ctx.getPackageName());
-        return id != 0 ? makeTransparentBanner(name, ctx.getDrawable(id)) : null;
+        if (id == 0) return null;
+        try {
+            Drawable d = ctx.getDrawable(id);
+            return makeTransparentBanner(name, d);
+        } catch (Resources.NotFoundException e) {
+            return null;
+        }
     }
 
     private Drawable loadBanner(PackageManager pm, ResolveInfo ri) {
+        String pkg = ri.activityInfo != null ? ri.activityInfo.packageName : null;
+        if (pkg != null) {
+            if ("com.netflix.ninja".equals(pkg)) {
+                Drawable b = bundledBanner("banner_netflix");
+                if (b != null) return b;
+            } else if ("com.google.android.youtube.tv".equals(pkg) || "com.google.android.youtube".equals(pkg)) {
+                Drawable b = bundledBanner("banner_youtube");
+                if (b != null) return b;
+            } else if ("com.android.vending".equals(pkg)) {
+                Drawable b = bundledBanner("banner_play");
+                if (b != null) return b;
+            }
+        }
         int id = ri.activityInfo.banner;
         if (id == 0) id = ri.activityInfo.applicationInfo.banner;
         Drawable banner = null;
@@ -344,7 +363,6 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         if (banner == null) banner = ri.activityInfo.loadBanner(pm);
         // A square "banner" counts as none: the tile shows the app's icon and name instead of a blur.
         if (banner != null && isBannerShaped(banner.getIntrinsicWidth(), banner.getIntrinsicHeight())) {
-            String pkg = ri.activityInfo != null ? ri.activityInfo.packageName : null;
             return makeTransparentBanner(pkg, banner);
         }
         return null;
@@ -876,9 +894,9 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         return Color.HSVToColor(hsv);
     }
 
-    /** Corner radius for a tile of this width: 16dp at the design width, proportionally less when smaller. */
+    /** Corner radius for a tile of this width: 18dp at the design width, proportionally less when smaller. */
     static float cornerRadius(int tileWidthPx, float density) {
-        return 16f * density * Math.min(1f, tileWidthPx / (DESIGN_W_DP * density));
+        return 18f * density * Math.min(1f, tileWidthPx / (DESIGN_W_DP * density));
     }
 
     static final class Holder extends RecyclerView.ViewHolder {

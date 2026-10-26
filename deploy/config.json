@@ -26,6 +26,12 @@
         "com.stremio.one=Stremio",
         "com.tcl.tv=PlayStation 5"
     ],
+    "app_banners": [
+        "com.netflix.ninja=banner_netflix",
+        "com.google.android.youtube.tv=banner_youtube",
+        "com.google.android.youtube=banner_youtube",
+        "com.android.vending=banner_play"
+    ],
     "show_inputs_pill": false,
     "dock_glass": true,
     "rows_below_dock": 0,
