@@ -107,6 +107,71 @@ public final class CallWebhookServer {
                 } else if ("/dismiss".equalsIgnoreCase(route)) {
                     CallBannerManager.getInstance(context).dismiss();
                     responseBody = "{\"success\":true,\"event\":\"dismissed\"}";
+                } else if ("/media".equalsIgnoreCase(route) || "/nowplaying".equalsIgnoreCase(route)) {
+                    String trackTitle = uri.getQueryParameter("title");
+                    String artist = uri.getQueryParameter("artist");
+                    String source = uri.getQueryParameter("source");
+                    String playingParam = uri.getQueryParameter("playing");
+
+                    if (trackTitle != null) {
+                        try {
+                            trackTitle = URLDecoder.decode(trackTitle, StandardCharsets.UTF_8.name());
+                        } catch (Exception ignored) {}
+                    }
+                    if (artist != null) {
+                        try {
+                            artist = URLDecoder.decode(artist, StandardCharsets.UTF_8.name());
+                        } catch (Exception ignored) {}
+                    }
+                    if (source != null) {
+                        try {
+                            source = URLDecoder.decode(source, StandardCharsets.UTF_8.name());
+                        } catch (Exception ignored) {}
+                    } else {
+                        source = "iPhone";
+                    }
+
+                    boolean isPlaying = true;
+                    if (playingParam != null) {
+                        isPlaying = !"false".equalsIgnoreCase(playingParam) &&
+                                    !"0".equals(playingParam) &&
+                                    !"no".equalsIgnoreCase(playingParam);
+                    }
+
+                    if (trackTitle != null && !trackTitle.isEmpty()) {
+                        MediaTrack remoteTrack = new MediaTrack(
+                                trackTitle,
+                                artist != null ? artist : "Remote Device",
+                                source,
+                                isPlaying,
+                                false,
+                                null,
+                                null
+                        );
+                        NowPlayingManager.getInstance().updateRemoteTrack(remoteTrack);
+                        responseBody = "{\"success\":true,\"event\":\"media_updated\",\"title\":\"" + escapeJson(trackTitle) + "\",\"playing\":" + isPlaying + "}";
+                    } else {
+                        responseBody = "{\"error\":\"Missing 'title' query parameter\"}";
+                    }
+                } else if ("/media/clear".equalsIgnoreCase(route)) {
+                    NowPlayingManager.getInstance().clearRemoteTrack();
+                    responseBody = "{\"success\":true,\"event\":\"media_cleared\"}";
+                } else if ("/media/toggle".equalsIgnoreCase(route)) {
+                    NowPlayingManager.getInstance().togglePlayPause();
+                    responseBody = "{\"success\":true,\"event\":\"media_toggled\"}";
+                } else if ("/media/next".equalsIgnoreCase(route)) {
+                    NowPlayingManager.getInstance().next();
+                    responseBody = "{\"success\":true,\"event\":\"media_next\"}";
+                } else if ("/media/prev".equalsIgnoreCase(route) || "/media/previous".equalsIgnoreCase(route)) {
+                    NowPlayingManager.getInstance().previous();
+                    responseBody = "{\"success\":true,\"event\":\"media_prev\"}";
+                } else if ("/media/status".equalsIgnoreCase(route)) {
+                    MediaTrack active = NowPlayingManager.getInstance().getActiveTrack();
+                    if (active != null) {
+                        responseBody = "{\"active\":true,\"title\":\"" + escapeJson(active.title) + "\",\"artist\":\"" + escapeJson(active.artist) + "\",\"source\":\"" + escapeJson(active.sourceName) + "\",\"isTv\":" + active.isTvSource + ",\"isPlaying\":" + active.isPlaying + "}";
+                    } else {
+                        responseBody = "{\"active\":false}";
+                    }
                 } else if ("/health".equalsIgnoreCase(route) || "/status".equalsIgnoreCase(route)) {
                     responseBody = "{\"status\":\"ok\",\"service\":\"CleanYourTV-CallBanner\",\"port\":" + PORT + "}";
                 }
@@ -125,6 +190,11 @@ public final class CallWebhookServer {
                 Log.w(TAG, "Error handling client request", e);
             }
         });
+    }
+
+    private static String escapeJson(String s) {
+        if (s == null) return "";
+        return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "");
     }
 
     public synchronized void stop() {

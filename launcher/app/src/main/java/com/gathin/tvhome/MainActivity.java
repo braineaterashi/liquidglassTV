@@ -153,6 +153,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private int glassAccent;
     private int ambientColor = -1;
     private ValueAnimator ambientAnimator;
+    private NowPlayingManager.OnTrackChangeListener mediaTrackListener;
     private boolean heroShown;
     private boolean animations;
     private boolean advancedEffects;
@@ -437,11 +438,32 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         inAppBanner.setElevation(50 * density);
         root.addView(inAppBanner, inAppBannerLp);
 
+        View topButtons = findViewById(R.id.topButtons);
+
+        // Liquid Glass Mini Media Player (Top Right Corner)
+        View miniPlayer = getLayoutInflater().inflate(R.layout.view_mini_player, root, false);
+        FrameLayout.LayoutParams miniPlayerLp = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP | Gravity.END
+        );
+        miniPlayerLp.topMargin = (int) (24 * density);
+        miniPlayerLp.rightMargin = (int) (56 * density);
+        miniPlayer.setVisibility(View.GONE);
+        miniPlayer.setElevation(35 * density);
+        root.addView(miniPlayer, miniPlayerLp);
+
         CallBannerManager.getInstance(this).setInAppListener(new CallBannerManager.OnCallBannerListener() {
             private ObjectAnimator inAppPulse;
 
             @Override
             public void onShowBanner(String title, String subtitle) {
+                if (miniPlayer.getVisibility() == View.VISIBLE) {
+                    miniPlayer.animate().cancel();
+                    miniPlayer.animate().alpha(0f).translationX(350 * density).setDuration(200)
+                            .withEndAction(() -> miniPlayer.setVisibility(View.INVISIBLE)).start();
+                }
+
                 TextView t = inAppBanner.findViewById(R.id.callTitle);
                 TextView s = inAppBanner.findViewById(R.id.callSubtitle);
                 if (t != null) t.setText(title);
@@ -473,9 +495,128 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 }
                 inAppBanner.animate().cancel();
                 inAppBanner.animate().translationX(400 * density).alpha(0f).setDuration(280)
-                        .withEndAction(() -> inAppBanner.setVisibility(View.GONE)).start();
+                        .withEndAction(() -> {
+                            inAppBanner.setVisibility(View.GONE);
+                            MediaTrack active = NowPlayingManager.getInstance().getActiveTrack();
+                            if (active != null) {
+                                miniPlayer.setVisibility(View.VISIBLE);
+                                miniPlayer.bringToFront();
+                                miniPlayer.animate().cancel();
+                                miniPlayer.animate().alpha(1f).translationX(0).setDuration(280).start();
+                            }
+                        }).start();
             }
         });
+
+        TextView playerTitle = miniPlayer.findViewById(R.id.playerTitle);
+        TextView playerArtist = miniPlayer.findViewById(R.id.playerArtist);
+        ImageView playerArt = miniPlayer.findViewById(R.id.playerArt);
+        TextView playerIconBadge = miniPlayer.findViewById(R.id.playerIconBadge);
+        EqualizerBarsView equalizerBars = miniPlayer.findViewById(R.id.equalizerBars);
+        TextView btnPlayerPrev = miniPlayer.findViewById(R.id.btnPlayerPrev);
+        TextView btnPlayerPlayPause = miniPlayer.findViewById(R.id.btnPlayerPlayPause);
+        TextView btnPlayerNext = miniPlayer.findViewById(R.id.btnPlayerNext);
+        View playerTextContainer = miniPlayer.findViewById(R.id.playerTextContainer);
+
+        if (btnPlayerPrev != null) {
+            btnPlayerPrev.setOnClickListener(v -> NowPlayingManager.getInstance().previous());
+        }
+        if (btnPlayerPlayPause != null) {
+            btnPlayerPlayPause.setOnClickListener(v -> NowPlayingManager.getInstance().togglePlayPause());
+        }
+        if (btnPlayerNext != null) {
+            btnPlayerNext.setOnClickListener(v -> NowPlayingManager.getInstance().next());
+        }
+        View.OnClickListener openAppAction = v -> NowPlayingManager.getInstance().openApp(MainActivity.this);
+        miniPlayer.setOnClickListener(openAppAction);
+        if (playerTextContainer != null) {
+            playerTextContainer.setOnClickListener(openAppAction);
+        }
+
+        mediaTrackListener = new NowPlayingManager.OnTrackChangeListener() {
+            @Override
+            public void onTrackUpdated(@androidx.annotation.Nullable MediaTrack track) {
+                if (track == null) {
+                    if (miniPlayer.getVisibility() == View.VISIBLE) {
+                        miniPlayer.animate().cancel();
+                        miniPlayer.animate()
+                                .translationX(350 * density)
+                                .alpha(0f)
+                                .setDuration(280)
+                                .withEndAction(() -> {
+                                    miniPlayer.setVisibility(View.GONE);
+                                    if (equalizerBars != null) equalizerBars.setPlaying(false);
+                                    if (topButtons != null) {
+                                        topButtons.setVisibility(View.VISIBLE);
+                                        topButtons.animate().cancel();
+                                        topButtons.animate().alpha(1f).setDuration(250).start();
+                                    }
+                                })
+                                .start();
+                    }
+                    return;
+                }
+
+                if (playerTitle != null) {
+                    playerTitle.setText(track.title);
+                    playerTitle.setSelected(true);
+                }
+                if (playerArtist != null) {
+                    playerArtist.setText(track.artist + " • " + track.sourceName);
+                }
+
+                if (track.albumArt != null) {
+                    if (playerArt != null) {
+                        playerArt.setImageBitmap(track.albumArt);
+                        playerArt.setVisibility(View.VISIBLE);
+                    }
+                    if (playerIconBadge != null) playerIconBadge.setVisibility(View.GONE);
+                } else {
+                    if (playerArt != null) playerArt.setVisibility(View.GONE);
+                    if (playerIconBadge != null) {
+                        playerIconBadge.setVisibility(View.VISIBLE);
+                        String src = track.sourceName != null ? track.sourceName.toLowerCase() : "";
+                        if (src.contains("apple")) {
+                            playerIconBadge.setText("🍎");
+                        } else if (src.contains("youtube")) {
+                            playerIconBadge.setText("▶");
+                        } else if (src.contains("spotify")) {
+                            playerIconBadge.setText("🎧");
+                        } else {
+                            playerIconBadge.setText("🎵");
+                        }
+                    }
+                }
+
+                if (btnPlayerPlayPause != null) {
+                    btnPlayerPlayPause.setText(track.isPlaying ? "⏸" : "▶");
+                }
+
+                if (equalizerBars != null) {
+                    equalizerBars.setPlaying(track.isPlaying);
+                }
+
+                if (miniPlayer.getVisibility() != View.VISIBLE) {
+                    if (topButtons != null && topButtons.getVisibility() == View.VISIBLE) {
+                        topButtons.animate().cancel();
+                        topButtons.animate().alpha(0f).setDuration(220)
+                                .withEndAction(() -> topButtons.setVisibility(View.INVISIBLE)).start();
+                    }
+                    miniPlayer.setVisibility(View.VISIBLE);
+                    miniPlayer.bringToFront();
+                    miniPlayer.animate().cancel();
+                    miniPlayer.setTranslationX(350 * density);
+                    miniPlayer.setAlpha(0f);
+                    miniPlayer.animate()
+                            .translationX(0)
+                            .alpha(1f)
+                            .setDuration(320)
+                            .start();
+                }
+            }
+        };
+
+        NowPlayingManager.getInstance().addListener(mediaTrackListener);
         vpnApp = cfg.vpnApp;
         moduleCards = cfg.moduleCards;
         hiddenApps = new HashSet<>(cfg.hiddenApps);
@@ -1044,6 +1185,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if (mediaTrackListener != null) {
+            NowPlayingManager.getInstance().removeListener(mediaTrackListener);
+        }
         CallBannerManager.getInstance(this).setHomescreenVisible(false);
         CallBannerManager.getInstance(this).setInAppListener(null);
         AncsBleManager.getInstance(this).stop();

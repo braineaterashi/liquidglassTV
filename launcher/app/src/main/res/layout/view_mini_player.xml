@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/miniPlayerRoot"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:minWidth="320dp"
+    android:maxWidth="380dp"
+    android:paddingStart="14dp"
+    android:paddingEnd="16dp"
+    android:paddingTop="10dp"
+    android:paddingBottom="10dp"
+    android:background="@drawable/bg_mini_player"
+    android:elevation="35dp"
+    android:clipToPadding="false"
+    android:clickable="true"
+    android:focusable="false">
+
+    <!-- Album Art / Source Badge -->
+    <FrameLayout
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_marginEnd="12dp"
+        android:background="@drawable/bg_badge_art"
+        android:clipToOutline="true">
+
+        <ImageView
+            android:id="@+id/playerArt"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/playerIconBadge"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="🎵"
+            android:textSize="22sp" />
+    </FrameLayout>
+
+    <!-- Track Title and Artist -->
+    <LinearLayout
+        android:id="@+id/playerTextContainer"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:gravity="center_vertical"
+        android:layout_marginEnd="12dp"
+        android:clickable="true"
+        android:focusable="false">
+
+        <TextView
+            android:id="@+id/playerTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Song Title"
+            android:textColor="#FFFFFFFF"
+            android:textSize="14sp"
+            android:fontFamily="@font/outfit_medium"
+            android:singleLine="true"
+            android:ellipsize="marquee"
+            android:marqueeRepeatLimit="marquee_forever" />
+
+        <TextView
+            android:id="@+id/playerArtist"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="Artist • Source"
+            android:textColor="#A6FFFFFF"
+            android:textSize="11.5sp"
+            android:fontFamily="@font/outfit_regular"
+            android:singleLine="true"
+            android:ellipsize="end" />
+    </LinearLayout>
+
+    <!-- Visualizer and Playback Controls -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:layout_marginStart="4dp">
+
+        <!-- Animated Audio Beat Bars -->
+        <com.gathin.tvhome.EqualizerBarsView
+            android:id="@+id/equalizerBars"
+            android:layout_width="28dp"
+            android:layout_height="14dp"
+            android:layout_marginBottom="6dp" />
+
+        <!-- Controls: Prev, Play/Pause, Next -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/btnPlayerPrev"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
+                android:background="@drawable/bg_player_btn"
+                android:gravity="center"
+                android:text="⏮"
+                android:textSize="12sp"
+                android:textColor="#D9FFFFFF"
+                android:focusable="true"
+                android:clickable="true" />
+
+            <TextView
+                android:id="@+id/btnPlayerPlayPause"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:layout_marginStart="6dp"
+                android:layout_marginEnd="6dp"
+                android:background="@drawable/bg_player_btn"
+                android:gravity="center"
+                android:text="⏸"
+                android:textSize="14sp"
+                android:textColor="#FFFFFFFF"
+                android:focusable="true"
+                android:clickable="true" />
+
+            <TextView
+                android:id="@+id/btnPlayerNext"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
+                android:background="@drawable/bg_player_btn"
+                android:gravity="center"
+                android:text="⏭"
+                android:textSize="12sp"
+                android:textColor="#D9FFFFFF"
+                android:focusable="true"
+                android:clickable="true" />
+        </LinearLayout>
+    </LinearLayout>
+
+</LinearLayout>
