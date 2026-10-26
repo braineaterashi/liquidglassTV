@@ -19,7 +19,7 @@ import java.util.concurrent.Executors;
 
 /**
  * Lightweight local LAN HTTP webhook server listening on port 8088.
- * Supports iOS Shortcuts, Apple Music, curl, or external automations to trigger
+ * Supports iOS Shortcuts, YouTube Music, curl, or external automations to trigger
  * the Liquid Glass Mini Player and Call Banner.
  */
 public final class CallWebhookServer {

@@ -157,7 +157,7 @@ public final class NowPlayingManager {
             }
         }
 
-        if (context != null) {
+        if (context != null && tvTrack != null) {
             try {
                 AudioManager am = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
                 if (am != null) {
@@ -167,9 +167,8 @@ public final class NowPlayingManager {
                 }
             } catch (Exception ignored) {}
 
-            if (tvTrack != null) {
-                BackgroundYouTubeAudioPlayer.getInstance().play(context, tvTrack.title, tvTrack.artist);
-            }
+            long startSec = tvTrack.getCurrentPositionSeconds();
+            BackgroundYouTubeAudioPlayer.getInstance().play(context, tvTrack.title, tvTrack.artist, tvTrack.videoId, startSec);
         }
     }
 
@@ -190,7 +189,8 @@ public final class NowPlayingManager {
         if (tvTrack != null) {
             tvTrack = new MediaTrack(
                     tvTrack.title, tvTrack.artist, tvTrack.sourceName, false,
-                    true, tvTrack.albumArt, tvTrack.mediaController
+                    true, tvTrack.albumArt, tvTrack.mediaController,
+                    tvTrack.videoId, tvTrack.getCurrentPositionMs()
             );
             dispatchUpdate();
         }
@@ -251,7 +251,8 @@ public final class NowPlayingManager {
             wasTvPlaying = willPlay;
             this.tvTrack = new MediaTrack(
                     active.title, active.artist, active.sourceName, willPlay,
-                    true, active.albumArt, active.mediaController
+                    true, active.albumArt, active.mediaController,
+                    active.videoId, active.getCurrentPositionMs()
             );
             dispatchUpdate();
         } else {
@@ -281,7 +282,36 @@ public final class NowPlayingManager {
     public void openApp(Context context) {
         BackgroundYouTubeAudioPlayer.getInstance().stop();
         MediaTrack active = getActiveTrack();
-        if (active == null) return;
+        if (active == null || context == null) return;
+
+        long targetSec = active.getCurrentPositionSeconds();
+        String videoId = active.videoId;
+        boolean isYouTube = isYouTubeTrack(active);
+
+        if (isYouTube) {
+            try {
+                Intent intent = null;
+                if (videoId != null && !videoId.isEmpty()) {
+                    String url = "https://www.youtube.com/watch?v=" + videoId + "&t=" + targetSec + "s";
+                    intent = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url));
+                    intent.setPackage("com.google.android.youtube.tv");
+                }
+                if (intent == null) {
+                    intent = context.getPackageManager().getLeanbackLaunchIntentForPackage("com.google.android.youtube.tv");
+                    if (intent == null) {
+                        intent = context.getPackageManager().getLaunchIntentForPackage("com.google.android.youtube.tv");
+                    }
+                }
+                if (intent != null) {
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    context.startActivity(intent);
+                    return;
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "Failed to launch YouTube with timestamp", e);
+            }
+        }
+
         if (active.isTvSource && active.mediaController != null) {
             PendingIntent pi = active.mediaController.getSessionActivity();
             if (pi != null) {
@@ -294,20 +324,18 @@ public final class NowPlayingManager {
             }
         }
 
-        // Open YouTube app on TV
-        if (context != null) {
-            try {
-                Intent intent = context.getPackageManager().getLeanbackLaunchIntentForPackage("com.google.android.youtube.tv");
-                if (intent == null) {
-                    intent = context.getPackageManager().getLaunchIntentForPackage("com.google.android.youtube.tv");
-                }
-                if (intent != null) {
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    context.startActivity(intent);
-                }
-            } catch (Exception e) {
-                Log.w(TAG, "Failed to launch YouTube", e);
+        // Open YouTube app on TV fallback
+        try {
+            Intent intent = context.getPackageManager().getLeanbackLaunchIntentForPackage("com.google.android.youtube.tv");
+            if (intent == null) {
+                intent = context.getPackageManager().getLaunchIntentForPackage("com.google.android.youtube.tv");
             }
+            if (intent != null) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(intent);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to launch YouTube", e);
         }
     }
 }

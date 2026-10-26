@@ -459,7 +459,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         miniPlayer.setVisibility(View.GONE);
         miniPlayer.setElevation(35 * density);
         root.addView(miniPlayer, miniPlayerLp);
-        BackgroundYouTubeAudioPlayer.getInstance().init(this);
+        BackgroundYouTubeAudioPlayer.getInstance().init(this, root);
 
         CallBannerManager.getInstance(this).setInAppListener(new CallBannerManager.OnCallBannerListener() {
             private ObjectAnimator inAppPulse;
@@ -1224,6 +1224,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     protected void onPause() {
         super.onPause();
         isHomescreenVisible = false;
+        BackgroundYouTubeAudioPlayer.getInstance().stop();
         hudDismissHandler.removeCallbacks(hudDismissRunnable);
         if (miniPlayer != null) {
             miniPlayer.animate().cancel();
@@ -1255,10 +1256,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     public void startActivity(Intent intent, Bundle options) {
         if (intent != null) {
-            ComponentName cn = intent.getComponent();
-            if (cn != null && !cn.getPackageName().equals(getPackageName())) {
+            String targetPkg = intent.getPackage();
+            if (targetPkg == null && intent.getComponent() != null) {
+                targetPkg = intent.getComponent().getPackageName();
+            }
+            if (targetPkg != null && !targetPkg.equals(getPackageName())) {
                 BackgroundYouTubeAudioPlayer.getInstance().stop();
-                NowPlayingManager.getInstance().pauseTvPlayback();
+                if (!targetPkg.contains("youtube")) {
+                    NowPlayingManager.getInstance().pauseTvPlayback();
+                }
             }
         }
         super.startActivity(intent, options);
@@ -1267,10 +1273,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     public void startActivityForResult(Intent intent, int requestCode, Bundle options) {
         if (intent != null) {
-            ComponentName cn = intent.getComponent();
-            if (cn != null && !cn.getPackageName().equals(getPackageName())) {
+            String targetPkg = intent.getPackage();
+            if (targetPkg == null && intent.getComponent() != null) {
+                targetPkg = intent.getComponent().getPackageName();
+            }
+            if (targetPkg != null && !targetPkg.equals(getPackageName())) {
                 BackgroundYouTubeAudioPlayer.getInstance().stop();
-                NowPlayingManager.getInstance().pauseTvPlayback();
+                if (!targetPkg.contains("youtube")) {
+                    NowPlayingManager.getInstance().pauseTvPlayback();
+                }
             }
         }
         super.startActivityForResult(intent, requestCode, options);

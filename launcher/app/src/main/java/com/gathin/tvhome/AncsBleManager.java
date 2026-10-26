@@ -433,13 +433,13 @@ public final class AncsBleManager {
                         lastMediaTitle = text;
                         Log.i(TAG, "Parsed media title: " + text);
                         NowPlayingManager.getInstance().updateRemoteTrack(new MediaTrack(
-                                text, "iPhone", "Apple Music", true, false, null, null
+                                text, "iPhone", "iPhone", true, false, null, null
                         ));
                     } else if (attributeId == 3) {
                         Log.i(TAG, "Parsed media artist: " + text);
                         String currentTitle = !TextUtils.isEmpty(lastMediaTitle) ? lastMediaTitle : "Now Playing";
                         NowPlayingManager.getInstance().updateRemoteTrack(new MediaTrack(
-                                currentTitle, text, "Apple Music", true, false, null, null
+                                currentTitle, text, "iPhone", true, false, null, null
                         ));
                     }
                 }

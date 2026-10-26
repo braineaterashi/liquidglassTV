@@ -140,10 +140,17 @@ public class MediaNotificationListenerService extends NotificationListenerServic
         MediaMetadata metadata = currentController.getMetadata();
 
         boolean isPlaying = state != null && state.getState() == PlaybackState.STATE_PLAYING;
+        long positionMs = 0;
+        if (state != null) {
+            positionMs = state.getPosition();
+            if (positionMs < 0) positionMs = 0;
+        }
 
         String title = null;
         String artist = null;
         Bitmap art = null;
+        String videoId = null;
+        String artUri = null;
 
         if (metadata != null) {
             title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE);
@@ -157,6 +164,23 @@ public class MediaNotificationListenerService extends NotificationListenerServic
             art = metadata.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART);
             if (art == null) art = metadata.getBitmap(MediaMetadata.METADATA_KEY_ART);
             if (art == null) art = metadata.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON);
+
+            String mediaId = metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_ID);
+            if (mediaId != null && mediaId.matches("^[a-zA-Z0-9_-]{11}$")) {
+                videoId = mediaId;
+            }
+
+            String mediaUri = metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_URI);
+            if (videoId == null && mediaUri != null) {
+                videoId = ArtworkHelper.extractVideoId(mediaUri);
+            }
+
+            artUri = metadata.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI);
+            if (artUri == null) artUri = metadata.getString(MediaMetadata.METADATA_KEY_ART_URI);
+            if (artUri == null) artUri = metadata.getString(MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI);
+            if (videoId == null && artUri != null) {
+                videoId = ArtworkHelper.extractVideoId(artUri);
+            }
         }
 
         String pkg = currentController.getPackageName();
@@ -176,32 +200,30 @@ public class MediaNotificationListenerService extends NotificationListenerServic
         final String finalTitle = title;
         final String finalArtist = artist != null ? artist : appName;
         final MediaController finalController = currentController;
+        final String currentVideoId = videoId;
+        final String finalArtUri = artUri;
 
-        if (art == null && metadata != null) {
-            String artUri = metadata.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI);
-            if (artUri == null) artUri = metadata.getString(MediaMetadata.METADATA_KEY_ART_URI);
-            if (artUri == null) artUri = metadata.getString(MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI);
-
-            ArtworkHelper.loadArtwork(finalTitle, finalArtist, artUri, bmp -> {
-                if (bmp != null) {
-                    handler.post(() -> {
-                        MediaTrack currentTv = NowPlayingManager.getInstance().getTvTrack();
-                        if (currentTv != null && finalTitle.equalsIgnoreCase(currentTv.title)) {
-                            MediaTrack withArt = new MediaTrack(
-                                    currentTv.title,
-                                    currentTv.artist,
-                                    currentTv.sourceName,
-                                    currentTv.isPlaying,
-                                    true,
-                                    bmp,
-                                    finalController
-                            );
-                            NowPlayingManager.getInstance().updateTvTrack(withArt);
-                        }
-                    });
-                }
-            });
-        }
+        ArtworkHelper.resolveYouTubeTrack(finalTitle, finalArtist, finalArtUri, currentVideoId, info -> {
+            if (info != null) {
+                handler.post(() -> {
+                    MediaTrack currentTv = NowPlayingManager.getInstance().getTvTrack();
+                    if (currentTv != null && finalTitle.equalsIgnoreCase(currentTv.title)) {
+                        MediaTrack updated = new MediaTrack(
+                                currentTv.title,
+                                currentTv.artist,
+                                currentTv.sourceName,
+                                currentTv.isPlaying,
+                                true,
+                                info.bitmap != null ? info.bitmap : currentTv.albumArt,
+                                finalController,
+                                info.videoId != null ? info.videoId : currentTv.videoId,
+                                currentTv.playbackPositionMs
+                        );
+                        NowPlayingManager.getInstance().updateTvTrack(updated);
+                    }
+                });
+            }
+        });
 
         MediaTrack track = new MediaTrack(
                 title,
@@ -210,7 +232,9 @@ public class MediaNotificationListenerService extends NotificationListenerServic
                 isPlaying,
                 true,
                 art,
-                currentController
+                currentController,
+                videoId,
+                positionMs
         );
 
         NowPlayingManager.getInstance().updateTvTrack(track);
